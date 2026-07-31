@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; margin: 0.3in 0.5in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    font-size: 9.3pt;
+    line-height: 1.08;
+    color: #111;
+  }
+  .header { text-align: center; margin-bottom: 3pt; }
+  .name { font-size: 16.5pt; font-weight: bold; letter-spacing: 0.5pt; }
+  .contact { font-size: 8.8pt; margin-top: 0pt; }
+  .contact a { color: #111; text-decoration: none; }
+  .section-title {
+    font-size: 10pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+    border-bottom: 0.75pt solid #111;
+    margin-top: 4pt;
+    margin-bottom: 2pt;
+    padding-bottom: 0.5pt;
+  }
+  .paragraph { margin: 0 0 1pt 0; text-align: justify; }
+  .entry { margin-bottom: 2pt; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .row > span:first-child { flex: 1; padding-right: 8pt; }
+  .row > span:last-child { white-space: nowrap; text-align: right; }
+  .row-bold { font-weight: bold; }
+  .row-italic { font-style: italic; }
+  .header-left-bold { font-weight: bold; }
+  .header-left-normal { font-weight: normal; }
+  ul.bullets { margin: 1pt 0 0 0; padding-left: 12pt; }
+  ul.bullets li { margin-bottom: 0.5pt; text-align: justify; }
+  .subentry { margin-top: 1.5pt; margin-left: 0pt; }
+  .subentry .row { font-style: italic; }
+  .subentry .sub-name { font-weight: bold; font-style: normal; }
+  .skills p { margin: 1pt 0; }
+  .skills .skill-cat { font-weight: bold; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ name }}</div>
+    <div class="contact">{{ contact | join(' | ') }}</div>
+  </div>
+
+  {% for section in sections %}
+  <div class="section-title">{{ section.title }}</div>
+
+  {% if section.type == 'paragraph' %}
+    <p class="paragraph">{{ section.content }}</p>
+
+  {% elif section.type == 'skills' %}
+    <div class="skills">
+      {% for cat in section.categories %}
+      <p><span class="skill-cat">{{ cat.name }}:</span> {{ cat['items'] | join(', ') }}</p>
+      {% endfor %}
+    </div>
+
+  {% elif section.type == 'entries' %}
+    {% for e in section.entries %}
+    <div class="entry">
+      <div class="row row-bold">
+        <span>{{ e.header_left_bold }}{% if e.header_left_normal %} <span class="header-left-normal">| {{ e.header_left_normal }}</span>{% endif %}</span>
+        <span>{{ e.header_right }}</span>
+      </div>
+      {% if e.two_line %}
+      <div class="row row-italic">
+        <span>{{ e.sub_left }}</span>
+        <span>{{ e.sub_right }}</span>
+      </div>
+      {% endif %}
+      {% if e.bullets %}
+      <ul class="bullets">
+        {% for b in e.bullets %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% for sub in e.subentries %}
+      <div class="subentry">
+        <div class="row">
+          <span class="sub-name">{{ sub.header_left_bold }}</span>
+          <span>{{ sub.header_right }}</span>
+        </div>
+        <ul class="bullets">
+          {% for b in sub.bullets %}<li>{{ b }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% endif %}
+  {% endfor %}
+</body>
+</html>

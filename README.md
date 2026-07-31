@@ -1,0 +1,140 @@
+# jobApplier
+
+A semi-automated LinkedIn job-search assistant: it searches for jobs matching your resume
+that were posted in the last 24 hours, tailors your resume and drafts a cover letter for
+each one with Claude, applies (Easy Apply flows are automated up to the final click, which
+you confirm yourself; external-site jobs get your documents prepared and the page opened
+for you to finish by hand), and logs every application to a CSV file.
+
+## Why semi-automatic?
+
+LinkedIn's Terms of Service don't allow automated bots to apply on your behalf. This tool
+is built to minimize that risk rather than ignore it:
+- A **real, headed Chrome browser** (not headless) drives everything, using a dedicated
+  persistent profile you log into once.
+- It drives LinkedIn's **own search UI/filters** - no scraping of undocumented APIs.
+- **You must type `yes` to confirm** before any Easy Apply submission is actually clicked -
+  nothing is submitted unattended.
+- External-site applications (Workday, Greenhouse, etc.) are **never auto-filled** - only
+  opened, with your tailored resume/cover letter ready alongside.
+- Randomized delays and a hard per-run application cap (`MAX_APPLICATIONS_PER_RUN`) keep the
+  activity pattern looking like a person browsing, not a bot blasting through jobs.
+
+There's still residual risk (LinkedIn could flag unusual activity regardless), so use your
+own judgment about how aggressively to run this.
+
+## One-time setup
+
+1. **Python deps**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   playwright install chromium chrome
+   ```
+
+2. **WeasyPrint's native libraries** (macOS, via Homebrew) - needed for PDF rendering:
+   ```bash
+   brew install pango gdk-pixbuf
+   ```
+   Homebrew's libraries aren't always found automatically by macOS; if you hit an error like
+   `cannot load library 'libgobject-2.0-0'`, run Python with:
+   ```bash
+   DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobapplier.main
+   ```
+
+3. **Claude access**: this tool calls Claude via your existing Claude Code subscription
+   (the `claude` CLI), not a separate paid API key. One-time login, in a normal terminal:
+   ```bash
+   claude /login
+   ```
+   Verify it worked:
+   ```bash
+   echo 'Reply with only: OK' | claude --bare -p
+   ```
+   It should print `OK`. If it says "Not logged in", the login didn't stick in this shell -
+   retry `claude /login` from the exact terminal you'll use to run `jobapplier.main`.
+
+4. **Environment variables**
+   ```bash
+   cp .env.example .env
+   ```
+   Then edit `.env`:
+   - `JOB_TITLES` - comma-separated keywords to search for
+   - `LOCATIONS` - semicolon-separated locations (use `Remote` as one if relevant)
+   - `SENIORITY_LEVEL` - comma-separated, from: `Internship, Entry level, Associate, Mid-Senior level, Director, Executive`
+   - `MAX_APPLICATIONS_PER_RUN`, `MIN_DELAY_SECONDS`, `MAX_DELAY_SECONDS` - safety/rate-limit knobs
+   - `BROWSER_PROFILE_DIR` - leave blank to default to `data/browser_profile`
+
+5. **Your resume**: place your resume PDF at `data/resume/master_resume.pdf`. The first run
+   parses it into `data/resume/master_resume.json` (via Claude) and caches it - delete that
+   JSON file and re-run if you update your resume PDF later and want to re-parse it.
+
+6. **Screening question answers**:
+   ```bash
+   cp data/answers/screening_answers.example.yaml data/answers/screening_answers.yaml
+   ```
+   Fill in your real phone/work-authorization/salary-expectation/etc. answers. Any Easy Apply
+   question the tool doesn't recognize will pause and ask you in the terminal once, then
+   remember your answer for next time.
+
+## Running it
+
+```bash
+source venv/bin/activate
+DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.main
+```
+
+A Chrome window will open. The first time, log into LinkedIn by hand in that window - the
+tool waits (up to 5 minutes) for your feed to load, then continues automatically. On later
+runs, the session persists and no re-login should be needed.
+
+For each matching job, the tool will:
+1. Tailor your resume + draft a cover letter for that specific job (saved to `data/generated/`).
+2. If it's **Easy Apply**: fill the form and screening questions, then pause and ask you to
+   type `yes` before actually submitting.
+3. If it's an **external site**: open the application page in a new tab for you to finish
+   manually, with your tailored documents ready.
+4. Record the result in `data/applications.csv`.
+
+## `data/applications.csv` columns
+
+`job_id, title, company, location, date_found, date_applied, status, resume_path, cover_letter_path, job_url, notes`
+
+`status` will be one of: `applied`, `cancelled_by_user` (you typed something other than
+`yes` at the confirmation prompt), `manual_pending` (external site, opened for you to
+finish), `manual_pending_no_url`, or `failed` (the flow hit something it couldn't handle -
+check the terminal output for that job).
+
+`job_id` is the dedupe key - anything already in this file is skipped in future searches, so
+you'll never be shown or reapply to the same job twice.
+
+## Portability across machines
+
+Everything needed lives under this project folder: `data/resume/master_resume.pdf` (your
+resume), `.env` (your config - gitignored), and `data/answers/screening_answers.yaml`
+(gitignored). Copy the whole folder to another machine, redo steps 1-3 above (dependencies
+and the `claude /login` are machine-specific), and it'll pick up right where it left off via
+`data/applications.csv`.
+
+If you put this project under git: `master_resume.pdf` is tracked by default (so it travels
+with the repo) but contains your personal contact info - be mindful of that before pushing to
+any shared or public remote. `.env`, `screening_answers.yaml`, `applications.csv`, and
+everything generated at runtime are already gitignored.
+
+## Known limitations
+
+- External-site applications are intentionally never auto-filled (see "Why semi-automatic?" above).
+- LinkedIn's page markup changes periodically; if searches start returning zero results or
+  the Easy Apply flow stops finding fields, the CSS selectors in `linkedin_search.py` and
+  `apply_easy.py` (grouped at the top of each file as `SELECTORS`) likely need updating to
+  match LinkedIn's current DOM.
+- Claude access goes through the `claude` CLI (`jobapplier/claude_cli.py`) using your Claude
+  Code subscription login rather than a Console API key. This means: (1) it must be run from
+  a terminal where `claude /login` has actually taken effect - a nested/sandboxed shell may
+  not share that login even on the same machine; (2) it draws from the same usage as your
+  interactive Claude Code sessions, so heavy job-search runs and heavy coding sessions could
+  compete for the same quota; (3) tool use (Bash/Read/Write/etc.) is left disabled for these
+  calls by omitting `--allowedTools`, but this wasn't independently confirmed against
+  Anthropic's docs - watch the first few runs to make sure Claude only ever returns plain
+  JSON and never attempts a file/shell action.

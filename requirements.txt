@@ -1,0 +1,7 @@
+playwright>=1.45
+pdfplumber>=0.11
+weasyprint>=62
+jinja2>=3.1
+pandas>=2.2
+python-dotenv>=1.0
+pyyaml>=6.0

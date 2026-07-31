@@ -1,0 +1,11 @@
+.env
+venv/
+__pycache__/
+*.pyc
+data/browser_profile/
+data/generated/
+data/applications.csv
+data/resume/master_resume.json
+data/answers/screening_answers.yaml
+.DS_Store
+.idea/

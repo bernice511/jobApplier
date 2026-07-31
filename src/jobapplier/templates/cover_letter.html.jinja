@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; margin: 0.9in 1in; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    font-size: 11pt;
+    line-height: 1.45;
+    color: #111;
+  }
+  .header { margin-bottom: 18pt; }
+  .name { font-size: 15pt; font-weight: bold; }
+  .contact { font-size: 9.6pt; margin-top: 2pt; }
+  .date { margin-bottom: 14pt; }
+  .greeting { margin-bottom: 10pt; }
+  p.body-para { margin: 0 0 10pt 0; text-align: justify; }
+  .signoff { margin-top: 14pt; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ name }}</div>
+    <div class="contact">{{ contact | join(' | ') }}</div>
+  </div>
+  <div class="date">{{ date }}</div>
+  <div class="greeting">{{ greeting }}</div>
+  {% for para in body_paragraphs %}
+  <p class="body-para">{{ para }}</p>
+  {% endfor %}
+  <div class="signoff">
+    {{ signoff }}<br>
+    {{ name }}
+  </div>
+</body>
+</html>
