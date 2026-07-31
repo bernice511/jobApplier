@@ -17,16 +17,28 @@ app = Flask(__name__)
 
 @app.get("/")
 def index():
-    return render_template("webapp_index.html")
+    return render_template("tailor.html.jinja", active_page="tailor")
+
+
+@app.get("/search")
+def search_page():
+    return render_template("search.html.jinja", active_page="search")
+
+
+VALID_GENERATE_OPTIONS = {"both", "resume", "cover_letter"}
 
 
 @app.post("/api/tailor")
 def api_tailor():
-    jd_text = (request.get_json(silent=True) or {}).get("jd_text", "").strip()
+    body = request.get_json(silent=True) or {}
+    jd_text = body.get("jd_text", "").strip()
+    generate = body.get("generate", "both")
     if not jd_text:
         return jsonify({"error": "Paste a job description first."}), 400
+    if generate not in VALID_GENERATE_OPTIONS:
+        return jsonify({"error": f"Invalid generate option: {generate}"}), 400
     try:
-        record = tailoring_service.tailor_from_jd(jd_text)
+        record = tailoring_service.tailor_from_jd(jd_text, generate=generate)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify(_with_filenames(record))
@@ -42,8 +54,10 @@ def api_query():
 def _with_filenames(record: dict) -> dict:
     return {
         **record,
-        "resume_filename": Path(record["resume_path"]).name,
-        "cover_letter_filename": Path(record["cover_letter_path"]).name,
+        "resume_filename": Path(record["resume_path"]).name if record.get("resume_path") else None,
+        "cover_letter_filename": (
+            Path(record["cover_letter_path"]).name if record.get("cover_letter_path") else None
+        ),
     }
 
 

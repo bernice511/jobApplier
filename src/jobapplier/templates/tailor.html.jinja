@@ -1,0 +1,101 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<div class="card">
+  <h2>Tailor from a job description</h2>
+  <p class="hint">Paste the full JD (company name included) — it'll be tailored against your master resume.</p>
+  <textarea id="jd-text" placeholder="Paste the job description here..."></textarea>
+
+  <div class="radio-group" id="generate-options">
+    <label><input type="radio" name="generate" value="both" checked> Resume + cover letter</label>
+    <label><input type="radio" name="generate" value="resume"> Resume only</label>
+    <label><input type="radio" name="generate" value="cover_letter"> Cover letter only</label>
+  </div>
+
+  <div>
+    <button class="primary" id="tailor-btn">Tailor</button>
+  </div>
+  <div id="tailor-status"></div>
+  <div id="tailor-result"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const tailorBtn = document.getElementById('tailor-btn');
+  const statusDiv = document.getElementById('tailor-status');
+  const resultDiv = document.getElementById('tailor-result');
+
+  function startLoading() {
+    let seconds = 0;
+    statusDiv.innerHTML = `
+      <div class="loading-box">
+        <div class="spinner-lg"></div>
+        <div id="loading-caption">Tailoring via Claude...</div>
+      </div>
+    `;
+    const caption = document.getElementById('loading-caption');
+    return setInterval(() => {
+      seconds += 1;
+      if (caption) caption.textContent = `Tailoring via Claude... ${seconds}s`;
+    }, 1000);
+  }
+
+  tailorBtn.addEventListener('click', async () => {
+    const jdText = document.getElementById('jd-text').value;
+    const generate = document.querySelector('input[name="generate"]:checked').value;
+    resultDiv.innerHTML = '';
+    tailorBtn.disabled = true;
+    const timer = startLoading();
+
+    try {
+      const resp = await fetch('/api/tailor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_text: jdText, generate }),
+      });
+      const data = await resp.json();
+      clearInterval(timer);
+      statusDiv.innerHTML = '';
+
+      if (!resp.ok) {
+        resultDiv.innerHTML = `<div class="error-box">${data.error || 'Something went wrong.'}</div>`;
+        return;
+      }
+
+      let downloads = '';
+      if (data.resume_filename) downloads += fileLink(data.resume_filename, 'Download resume');
+      if (data.cover_letter_filename) downloads += fileLink(data.cover_letter_filename, 'Download cover letter');
+
+      let html = `
+        <div class="result-header">
+          <div class="result-title">${data.title} @ ${data.company}${data.location ? ' - ' + data.location : ''}</div>
+          <div class="downloads">${downloads}</div>
+        </div>
+        ${statTileHtml(data.match_score)}
+      `;
+
+      if (data.changes && data.changes.length) {
+        html += `<div class="changes-title">What changed</div><ul class="changes-list">`;
+        data.changes.forEach((c) => { html += `<li>${c}</li>`; });
+        html += `</ul>`;
+      }
+
+      if (data.resume_preview_html) {
+        html += `
+          <p class="preview-note">Highlighted text was reworded from your master resume — preview only, the downloaded PDF is clean.</p>
+          <div class="preview-box">${data.resume_preview_html}</div>
+        `;
+      }
+
+      resultDiv.innerHTML = html;
+    } catch (e) {
+      clearInterval(timer);
+      statusDiv.innerHTML = '';
+      resultDiv.innerHTML = `<div class="error-box">${e}</div>`;
+    } finally {
+      tailorBtn.disabled = false;
+    }
+  });
+</script>
+{% endblock %}

@@ -14,8 +14,16 @@
     .resume-preview ul.bullets { margin: 3px 0 0 0; padding-left: 18px; }
     .resume-preview ul.bullets li { margin-bottom: 2px; }
     .resume-preview .subentry { margin-top: 4px; }
-    .resume-preview mark.changed { background: #fff2a8; padding: 0 2px; border-radius: 2px; }
+    .resume-preview mark.changed {
+      background: rgba(237,161,0,0.20); border-bottom: 2px solid #eda100;
+      color: inherit; padding: 0 2px; border-radius: 2px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .resume-preview mark.changed { background: rgba(201,133,0,0.28); border-bottom-color: #c98500; }
+    }
   </style>
+
+  {% macro segs(segments) %}{% for seg in segments %}{% if seg.changed %}<mark class="changed">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% endfor %}{% endmacro %}
 
   <div class="header">
     <div class="name">{{ name }}</div>
@@ -26,7 +34,7 @@
   <div class="section-title">{{ section.title }}</div>
 
   {% if section.type == 'paragraph' %}
-    <p>{% if section.content.changed %}<mark class="changed">{{ section.content.text }}</mark>{% else %}{{ section.content.text }}{% endif %}</p>
+    <p>{{ segs(section.content.segments) }}</p>
 
   {% elif section.type == 'skills' %}
     {% for cat in section.categories %}
@@ -49,7 +57,7 @@
       {% if e.bullets %}
       <ul class="bullets">
         {% for b in e.bullets %}
-        <li>{% if b.changed %}<mark class="changed">{{ b.text }}</mark>{% else %}{{ b.text }}{% endif %}</li>
+        <li>{{ segs(b.segments) }}</li>
         {% endfor %}
       </ul>
       {% endif %}
@@ -61,7 +69,7 @@
         </div>
         <ul class="bullets">
           {% for b in sub.bullets %}
-          <li>{% if b.changed %}<mark class="changed">{{ b.text }}</mark>{% else %}{{ b.text }}{% endif %}</li>
+          <li>{{ segs(b.segments) }}</li>
           {% endfor %}
         </ul>
       </div>

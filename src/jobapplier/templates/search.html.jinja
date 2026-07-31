@@ -1,0 +1,51 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<div class="card">
+  <h2>Ask about past applications</h2>
+  <p class="hint">e.g. "which resume did I use for Netflix" or "backend role at Google"</p>
+  <div id="chat-log"></div>
+  <div class="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Type a question..." autofocus>
+    <button class="secondary" id="chat-btn">Ask</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chatLog = document.getElementById('chat-log');
+  const chatInput = document.getElementById('chat-input');
+
+  document.getElementById('chat-btn').addEventListener('click', askQuestion);
+  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') askQuestion(); });
+
+  async function askQuestion() {
+    const question = chatInput.value.trim();
+    if (!question) return;
+
+    const q = document.createElement('div');
+    q.className = 'bubble-user';
+    q.textContent = question;
+    chatLog.appendChild(q);
+    chatInput.value = '';
+
+    const resp = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+    const data = await resp.json();
+
+    if (!data.matches || data.matches.length === 0) {
+      const none = document.createElement('div');
+      none.className = 'bubble-empty';
+      none.textContent = 'No matching applications found.';
+      chatLog.appendChild(none);
+    } else {
+      data.matches.forEach((r) => chatLog.appendChild(renderResultCard(r)));
+    }
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+</script>
+{% endblock %}
