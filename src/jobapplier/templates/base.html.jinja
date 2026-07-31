@@ -85,6 +85,21 @@
     }
     textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
 
+    .chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.3rem 0 0.2rem; }
+    .chip {
+      font-size: 0.8rem; padding: 0.25rem 0.7rem; border-radius: 999px;
+      background: var(--gridline); color: var(--text-2);
+    }
+    .keyword-option {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 8px;
+      margin-bottom: 0.5rem; cursor: pointer;
+    }
+    .keyword-option:hover { border-color: var(--accent); }
+    .keyword-option input { margin-top: 0.2rem; accent-color: var(--accent); cursor: pointer; }
+    .keyword-term { font-weight: 600; font-size: 0.88rem; }
+    .keyword-basis { display: block; color: var(--text-muted); font-size: 0.8rem; margin-top: 2px; }
+
     .radio-group {
       display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin-top: 0.9rem;
       font-size: 0.85rem; color: var(--text-2);

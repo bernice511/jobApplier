@@ -1,19 +1,29 @@
-"""Paste-a-JD flow: identify company/title/location AND tailor the resume and/or cover
-letter in one Claude call (unlike tailor.py's tailor_application, which is used by the
-LinkedIn flow in main.py where company/title/location are already known from LinkedIn's own
-metadata and don't need to be re-derived from text). Keeping this as its own prompt - rather
-than a second call into tailor.py - is what keeps this flow to a single `claude` CLI round
-trip, which is most of where the latency is (each CLI invocation has real subprocess/startup
-overhead on top of the model call itself).
+"""Paste-a-JD flow, split into two phases so the UI isn't a single long blocking wait:
 
-The caller can ask for just the resume, just the cover letter, or both (GenerateOption) -
-skipping the unneeded half shrinks the prompt/response and cuts generation time further.
+1. analyze_jd() - one fast Claude call: extracts company/title/location, scores fit against
+   the CURRENT (untouched) master resume, and suggests JD keywords that aren't literally in
+   the resume but are honestly connectable to something the candidate has actually done. The
+   user reviews these and picks which ones they personally vouch for (plus optional free-text
+   notes) before anything is written - this is what lets truthful keywords in without the
+   model ever being allowed to invent one on its own.
 
+2. tailor_from_jd() - generates the resume and/or cover letter. When both are requested, they
+   run as two independent, concurrent `claude` CLI calls (see GenerateOption / ThreadPoolExecutor
+   below) rather than one merged call, so wall-clock time is bounded by the slower of the two
+   instead of the sum.
+
+Company/title/location are extracted once during analyze_jd() and passed into
+tailor_from_jd() by the caller (webapp.py) - the generation calls don't re-derive them, both
+for speed and so a resume-call and cover-letter-call can't disagree on the job's identity.
+
+Never touches tailor.py, which is the LinkedIn-flow module (main.py) where company/title/
+location come from LinkedIn's own metadata rather than being extracted from raw text.
 Renders PDFs and logs the result so it can be looked up later (see webapp.py)."""
 from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from typing import Literal
 
@@ -25,12 +35,49 @@ from jobapplier.resume_template import render_cover_letter, render_resume
 
 GenerateOption = Literal["both", "resume", "cover_letter"]
 
+ANALYZE_INSTRUCTIONS = """
+Do not use any tools (no file reads/writes, no bash, no web access) - just respond with the
+JSON described below, nothing else.
+
+You are given a raw, pasted job description and a candidate's master resume. This is an
+ANALYSIS pass only - do not rewrite the resume yet.
+
+Return ONLY a JSON object with exactly six top-level keys: "company", "title", "location",
+"match_score", "matched_keywords", "suggested_keywords".
+
+"company"/"title"/"location": extracted from the job description (location null if not stated).
+
+"match_score": integer 0-10 - your honest estimate of how well the candidate's EXISTING,
+unmodified resume already overlaps this JD's key requirements. Do not inflate it.
+
+"matched_keywords": up to 8 short strings - JD-important terms/skills the master resume
+ALREADY genuinely demonstrates (verbatim or clearly equivalent).
+
+"suggested_keywords": up to 8 objects {"term": str, "based_on": str} - JD-important terms
+the resume does NOT explicitly state, but which are honestly connectable to something the
+candidate has actually done. "term" is the JD's own language (e.g. "vector databases").
+"based_on" is a specific, one-sentence explanation of which existing master-resume experience
+could truthfully support this term (e.g. "Built a RAG pipeline over 100GB+ of biomedical data
+using OpenSearch, which is a vector search backend"). Only include a term if there is a real,
+specific, defensible connection - never suggest a term with no genuine basis in the resume,
+and never invent an experience just to justify one. If nothing honestly qualifies, return
+fewer than 8, including zero.
+
+Output ONLY the JSON object, exactly once - no commentary, no reasoning, no self-correction,
+no markdown code fences, and no second JSON object even if you reconsider partway through.
+
+--- MASTER RESUME ---
+{master_resume_json}
+
+--- JOB DESCRIPTION ---
+{jd_text}
+"""
+
 HEADER = """
 Do not use any tools (no file reads/writes, no bash, no web access) - just respond with the
 JSON described below, nothing else.
 
-You are given a raw, pasted job description. First identify the company, job title, and
-location from it. {task_sentence}
+{task_sentence}
 
 You are an expert resume writer, not a fabricator: every fact in your output must already
 exist in the master resume below. You may reword, reorder, re-emphasize, or select among
@@ -39,10 +86,21 @@ priorities - but you must NEVER invent an employer, title, date, skill, tool, me
 accomplishment that isn't already present in the master resume.
 
 Return ONLY a JSON object with exactly {n_keys} top-level keys: {key_list}.
+"""
 
-"company": the company name, extracted from the job description (string).
-"title": the job title, extracted from the job description (string).
-"location": the location if mentioned, else null.
+APPROVED_KEYWORDS_BLOCK = """
+The candidate has reviewed and personally confirmed the following JD-related terms genuinely
+apply to their real experience (with their own reasoning below) - you may naturally weave
+this language into existing bullets/skills where it fits, but do not invent a new bullet,
+employer, or metric just to use a term; only reword/re-emphasize real, existing content:
+{keyword_lines}
+"""
+
+NOTES_BLOCK = """
+Additional instructions from the candidate to take into account (still must stay truthful -
+do not invent facts beyond real content in the master resume, but use these notes to guide
+emphasis, wording, or framing):
+{notes}
 """
 
 RESUME_BLOCK = """
@@ -74,26 +132,22 @@ ATS and for human recruiters:
 - Within each experience/project entry, you may reorder bullets so the most JD-relevant
   ones come first, and reword bullets - in Action + Context + Result form, kept to about
   2 lines each - to use the JD's terminology WHERE that terminology truthfully describes
-  what the bullet already says (e.g. if the JD says "LLM orchestration" and a bullet
-  already describes building a multi-agent LLM system, it's fine to surface that phrase -
-  but don't claim experience with a tool or technique the resume never mentions). Do not
-  delete substantive content or metrics.
+  what the bullet already says. Do not delete substantive content or metrics.
 - In "Technical Skills", you may reorder categories/items to put the most JD-relevant ones
-  first, but the set of skills must stay identical to the input (no additions or removals) -
-  never add a skill just because the JD mentions it.
+  first, but the set of skills must stay identical to the input (no additions or removals)
+  UNLESS a term appears in the approved-keywords list below, in which case you may fold it
+  into the relevant category as a real skill.
 - Do not change dates, titles, company names, or numeric metrics.
 - Keep every section from the input present in the output, in the same section order, and
   keep entries (companies/projects) within each section in the same order.
 
 "match_score" must be an integer 0-10: your honest estimate of how well the *tailored*
 resume's existing skills/experience overlap this JD's key requirements (keyword coverage,
-seniority, domain fit). Do not inflate it - a resume genuinely missing JD-critical skills
-should score lower, since you cannot fabricate missing skills to raise the score.
+seniority, domain fit). Do not inflate it.
 
 "changes" must be a list of 3-8 short strings, each describing one concrete edit you
-actually made and why (e.g. "Reordered bullets under Acme Corp to lead with the
-multi-agent LLM project, matching the JD's top priority"). Do not list vague statements
-like "improved overall quality" - be specific about what moved or was reworded.
+actually made and why. Do not list vague statements like "improved overall quality" - be
+specific about what moved or was reworded.
 """
 
 COVER_LETTER_BLOCK = """
@@ -121,29 +175,56 @@ no markdown code fences, and no second JSON object even if you reconsider partwa
 --- MASTER RESUME (source of truth - do not add facts beyond this) ---
 {master_resume_json}
 
---- JOB DESCRIPTION (raw paste - extract company/title/location from this) ---
+--- JOB (company: {company}, title: {job_title}, location: {job_location}) ---
 {jd_text}
 
 Today's date (for the cover letter header): {today}
 """
 
 
-def _build_prompt(jd_text: str, master_resume: dict, generate: GenerateOption) -> str:
-    want_resume = generate in ("both", "resume")
-    want_cover = generate in ("both", "cover_letter")
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_") or "job"
 
-    keys = ["company", "title", "location"]
-    if want_resume:
-        keys += ["resume", "match_score", "changes"]
-    if want_cover:
-        keys.append("cover_letter")
 
-    if want_resume and want_cover:
-        task_sentence = "Then tailor a candidate's resume and draft a cover letter for that job."
-    elif want_resume:
-        task_sentence = "Then tailor a candidate's resume for that job (no cover letter needed)."
+def analyze_jd(jd_text: str) -> dict:
+    """Fast pass: company/title/location + fit score + honest keyword suggestions, with no
+    resume rewriting yet. Meant to return quickly so the UI has something to show well before
+    full generation would finish."""
+    master_resume = resume_parser.parse_and_cache()
+    prompt = (
+        ANALYZE_INSTRUCTIONS
+        .replace("{master_resume_json}", json.dumps(master_resume, indent=2))
+        .replace("{jd_text}", jd_text)
+    )
+    result = call_claude_json(prompt)
+    return {
+        "company": result.get("company") or "Unknown Company",
+        "title": result.get("title") or "Unknown Title",
+        "location": result.get("location") or "",
+        "match_score": result.get("match_score"),
+        "matched_keywords": result.get("matched_keywords", []),
+        "suggested_keywords": result.get("suggested_keywords", []),
+    }
+
+
+def _build_prompt(
+    jd_text: str,
+    master_resume: dict,
+    company: str,
+    title: str,
+    location: str,
+    kind: Literal["resume", "cover_letter"],
+    approved_keywords: list[dict],
+    notes: str,
+) -> str:
+    if kind == "resume":
+        keys = ["resume", "match_score", "changes"]
+        task_sentence = "Tailor a candidate's resume for the job described below."
+        body = RESUME_BLOCK
     else:
-        task_sentence = "Then draft a cover letter for that job (no resume edit needed)."
+        keys = ["cover_letter"]
+        task_sentence = "Draft a cover letter for the job described below."
+        body = COVER_LETTER_BLOCK
 
     header = HEADER.format(
         task_sentence=task_sentence,
@@ -151,15 +232,21 @@ def _build_prompt(jd_text: str, master_resume: dict, generate: GenerateOption) -
         key_list=", ".join(f'"{k}"' for k in keys),
     )
 
-    body = ""
-    if want_resume:
-        body += RESUME_BLOCK
-    if want_cover:
-        body += COVER_LETTER_BLOCK
+    if approved_keywords:
+        keyword_lines = "\n".join(
+            f'- "{kw["term"]}" - {kw.get("based_on", "")}' for kw in approved_keywords
+        )
+        body += APPROVED_KEYWORDS_BLOCK.format(keyword_lines=keyword_lines)
+
+    if notes.strip():
+        body += NOTES_BLOCK.format(notes=notes.strip())
 
     footer = (
         FOOTER
         .replace("{master_resume_json}", json.dumps(master_resume, indent=2))
+        .replace("{company}", company)
+        .replace("{job_title}", title)
+        .replace("{job_location}", location)
         .replace("{jd_text}", jd_text)
         .replace("{today}", date.today().strftime("%B %d, %Y"))
     )
@@ -167,52 +254,88 @@ def _build_prompt(jd_text: str, master_resume: dict, generate: GenerateOption) -
     return header + body + footer
 
 
-def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_") or "job"
+def _generate_resume(jd_text, master_resume, company, title, location, approved_keywords, notes):
+    prompt = _build_prompt(
+        jd_text, master_resume, company, title, location, "resume", approved_keywords, notes
+    )
+    result = call_claude_json(prompt)
+    if "resume" not in result:
+        raise ValueError("Claude response missing 'resume' key")
+    return result
 
 
-def tailor_from_jd(jd_text: str, generate: GenerateOption = "both") -> dict:
-    """Runs the paste-JD flow in a single Claude call, generating only what's asked for.
-    Returns a dict with company/title/location and whichever PDF path(s) were generated."""
+def _generate_cover_letter(jd_text, master_resume, company, title, location, approved_keywords, notes):
+    prompt = _build_prompt(
+        jd_text, master_resume, company, title, location, "cover_letter", approved_keywords, notes
+    )
+    result = call_claude_json(prompt)
+    if "cover_letter" not in result:
+        raise ValueError("Claude response missing 'cover_letter' key")
+    return result
+
+
+def tailor_from_jd(
+    jd_text: str,
+    company: str,
+    title: str,
+    location: str = "",
+    generate: GenerateOption = "both",
+    approved_keywords: list[dict] | None = None,
+    notes: str = "",
+) -> dict:
+    """Generates the resume and/or cover letter for a job already identified by analyze_jd().
+    When generate="both", the two calls run concurrently instead of as one merged call."""
+    approved_keywords = approved_keywords or []
     want_resume = generate in ("both", "resume")
     want_cover = generate in ("both", "cover_letter")
-
     master_resume = resume_parser.parse_and_cache()
-    prompt = _build_prompt(jd_text, master_resume, generate)
-    result = call_claude_json(prompt)
 
-    if want_resume and "resume" not in result:
-        raise ValueError("Claude response missing 'resume' key")
-    if want_cover and "cover_letter" not in result:
-        raise ValueError("Claude response missing 'cover_letter' key")
+    resume_result = None
+    cover_result = None
+    if want_resume and want_cover:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resume_future = executor.submit(
+                _generate_resume, jd_text, master_resume, company, title, location,
+                approved_keywords, notes,
+            )
+            cover_future = executor.submit(
+                _generate_cover_letter, jd_text, master_resume, company, title, location,
+                approved_keywords, notes,
+            )
+            resume_result = resume_future.result()
+            cover_result = cover_future.result()
+    elif want_resume:
+        resume_result = _generate_resume(
+            jd_text, master_resume, company, title, location, approved_keywords, notes
+        )
+    else:
+        cover_result = _generate_cover_letter(
+            jd_text, master_resume, company, title, location, approved_keywords, notes
+        )
 
-    company = result.get("company") or "Unknown Company"
-    title = result.get("title") or "Unknown Title"
-    location = result.get("location") or ""
     slug = f"{_slugify(company)}_{_slugify(title)}_{datetime.now():%Y%m%d%H%M%S}"
-
     record = {
         "company": company,
         "title": title,
         "location": location,
         "resume_path": "",
         "cover_letter_path": "",
-        "match_score": result.get("match_score") if want_resume else "",
+        "match_score": resume_result.get("match_score") if resume_result else "",
     }
     extra = {"changes": [], "resume_preview_html": ""}
 
-    if want_resume:
+    if resume_result:
         resume_pdf = GENERATED_DIR / f"{slug}_resume.pdf"
-        render_resume(result["resume"], resume_pdf)
+        render_resume(resume_result["resume"], resume_pdf)
         record["resume_path"] = str(resume_pdf)
 
-        highlighted_resume = resume_diff.diff_resume(master_resume, result["resume"])
-        extra["changes"] = result.get("changes", [])
+        highlighted_resume = resume_diff.diff_resume(master_resume, resume_result["resume"])
+        extra["changes"] = resume_result.get("changes", [])
         extra["resume_preview_html"] = render_resume_preview_html(highlighted_resume)
 
-    if want_cover:
+    if cover_result:
         cover_letter_pdf = GENERATED_DIR / f"{slug}_cover_letter.pdf"
-        render_cover_letter(result["cover_letter"], cover_letter_pdf)
+        render_cover_letter(cover_result["cover_letter"], cover_letter_pdf)
         record["cover_letter_path"] = str(cover_letter_pdf)
 
     tailoring_log.append_record(record)

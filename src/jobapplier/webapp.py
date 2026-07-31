@@ -28,17 +28,39 @@ def search_page():
 VALID_GENERATE_OPTIONS = {"both", "resume", "cover_letter"}
 
 
+@app.post("/api/analyze")
+def api_analyze():
+    jd_text = (request.get_json(silent=True) or {}).get("jd_text", "").strip()
+    if not jd_text:
+        return jsonify({"error": "Paste a job description first."}), 400
+    try:
+        analysis = tailoring_service.analyze_jd(jd_text)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(analysis)
+
+
 @app.post("/api/tailor")
 def api_tailor():
     body = request.get_json(silent=True) or {}
     jd_text = body.get("jd_text", "").strip()
+    company = body.get("company", "").strip()
+    title = body.get("title", "").strip()
+    location = body.get("location", "").strip()
     generate = body.get("generate", "both")
-    if not jd_text:
-        return jsonify({"error": "Paste a job description first."}), 400
+    approved_keywords = body.get("approved_keywords", [])
+    notes = body.get("notes", "")
+
+    if not jd_text or not company or not title:
+        return jsonify({"error": "Run analyze first - missing jd_text/company/title."}), 400
     if generate not in VALID_GENERATE_OPTIONS:
         return jsonify({"error": f"Invalid generate option: {generate}"}), 400
+
     try:
-        record = tailoring_service.tailor_from_jd(jd_text, generate=generate)
+        record = tailoring_service.tailor_from_jd(
+            jd_text, company, title, location,
+            generate=generate, approved_keywords=approved_keywords, notes=notes,
+        )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify(_with_filenames(record))
