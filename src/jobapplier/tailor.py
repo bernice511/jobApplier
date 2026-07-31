@@ -26,7 +26,8 @@ existing bullets/skills/sections to better match the job description's language 
 priorities - but you must NEVER invent an employer, title, date, skill, tool, metric, or
 accomplishment that isn't already present in the master resume.
 
-Return ONLY a JSON object with exactly two top-level keys: "resume" and "cover_letter".
+Return ONLY a JSON object with exactly four top-level keys: "resume", "cover_letter",
+"match_score", and "changes".
 
 "resume" must be the master resume re-expressed in this exact schema (identical shape to
 the input - same section types, same keys):
@@ -48,19 +49,34 @@ the input - same section types, same keys):
   ]
 }
 
-Tailoring guidance for "resume":
+Tailoring guidance for "resume" - act as a senior hiring manager reviewing this for an
+ATS and for human recruiters:
 - Rewrite the "Profile"/summary paragraph to foreground the candidate's most relevant
-  existing experience for this job.
+  existing experience for this job, using the JD's own terminology where it truthfully
+  applies, to maximize ATS keyword match.
 - Within each experience/project entry, you may reorder bullets so the most JD-relevant
-  ones come first, and reword bullets to use the JD's terminology WHERE that terminology
-  truthfully describes what the bullet already says (e.g. if the JD says "LLM orchestration"
-  and a bullet already describes building a multi-agent LLM system, it's fine to surface that
-  phrase - but don't claim experience with a tool or technique the resume never mentions).
-  Do not delete substantive content or metrics.
+  ones come first, and reword bullets - in Action + Context + Result form, kept to about
+  2 lines each - to use the JD's terminology WHERE that terminology truthfully describes
+  what the bullet already says (e.g. if the JD says "LLM orchestration" and a bullet
+  already describes building a multi-agent LLM system, it's fine to surface that phrase -
+  but don't claim experience with a tool or technique the resume never mentions). Do not
+  delete substantive content or metrics.
 - In "Technical Skills", you may reorder categories/items to put the most JD-relevant ones
-  first, but the set of skills must stay identical to the input (no additions or removals).
+  first, but the set of skills must stay identical to the input (no additions or removals) -
+  never add a skill just because the JD mentions it.
 - Do not change dates, titles, company names, or numeric metrics.
-- Keep every section from the input present in the output, in the same section order.
+- Keep every section from the input present in the output, in the same section order, and
+  keep entries (companies/projects) within each section in the same order.
+
+"match_score" must be an integer 0-10: your honest estimate of how well the *tailored*
+resume's existing skills/experience overlap this JD's key requirements (keyword coverage,
+seniority, domain fit). Do not inflate it - a resume genuinely missing JD-critical skills
+should score lower, since you cannot fabricate missing skills to raise the score.
+
+"changes" must be a list of 3-8 short strings, each describing one concrete edit you
+actually made and why (e.g. "Reordered bullets under Acme Corp to lead with the
+multi-agent LLM project, matching the JD's top priority"). Do not list vague statements
+like "improved overall quality" - be specific about what moved or was reworded.
 
 "cover_letter" must match this schema:
 {
@@ -111,4 +127,6 @@ def tailor_application(master_resume: dict, job: dict) -> dict:
 
     if "resume" not in result or "cover_letter" not in result:
         raise ValueError("Claude response missing 'resume' or 'cover_letter' key")
+    result.setdefault("match_score", None)
+    result.setdefault("changes", [])
     return result

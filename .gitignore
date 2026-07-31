@@ -5,6 +5,7 @@ __pycache__/
 data/browser_profile/
 data/generated/
 data/applications.csv
+data/tailoring_log.csv
 data/resume/master_resume.json
 data/answers/screening_answers.yaml
 .DS_Store

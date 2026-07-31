@@ -7,8 +7,9 @@ real terminal on this machine - there is no way to authenticate non-interactivel
 nested/sandboxed shell (e.g. an agent's own tool-call subprocess) may not share that login
 session even when the user's own terminal is logged in.
 
-`--bare` skips local project config auto-discovery (CLAUDE.md, hooks, permission settings)
-so behavior stays consistent regardless of which directory this is invoked from. No
+Deliberately NOT using `--bare`: per `claude --help`, bare mode reads auth strictly from
+ANTHROPIC_API_KEY/apiKeyHelper and never from OAuth/keychain, which breaks subscription
+login entirely (the whole point of going through the CLI instead of a Console API key). No
 `--allowedTools` is passed, which leaves tool use (Bash/Read/Write/etc.) unavailable for
 this headless call - we only want a plain text/JSON response back.
 """
@@ -30,7 +31,7 @@ def call_claude(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS) 
     unparseable output, etc.)."""
     try:
         proc = subprocess.run(
-            ["claude", "--bare", "-p", "--output-format", "json"],
+            ["claude", "-p", "--output-format", "json"],
             input=prompt,
             capture_output=True,
             text=True,
@@ -70,13 +71,44 @@ def call_claude(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS) 
     return result
 
 
+def _find_json_objects(text: str) -> list[str]:
+    """Returns all top-level {...} substrings in text, via balanced-brace scanning."""
+    spans = []
+    depth = 0
+    start = None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    spans.append(text[start:i + 1])
+    return spans
+
+
 def call_claude_json(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS) -> dict:
     """Like call_claude, but strips markdown code fences (if present) and parses the
-    result as JSON. Raises ClaudeCLIError if the response isn't valid JSON."""
+    result as JSON. Raises ClaudeCLIError if the response isn't valid JSON.
+
+    Occasionally Claude second-guesses itself mid-response and emits commentary plus more
+    than one JSON object (e.g. "Wait, let me correct this - {...}"). To tolerate that
+    without silently accepting garbage, if a plain parse of the whole response fails, this
+    falls back to scanning for balanced {...} objects and trying the LAST one first (it's
+    the self-corrected final answer), then earlier ones, before giving up."""
     raw = call_claude(prompt, timeout_seconds=timeout_seconds).strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
     try:
         return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ClaudeCLIError(f"Claude's response wasn't valid JSON: {raw[:1000]}") from exc
+    except json.JSONDecodeError:
+        pass
+
+    for candidate in reversed(_find_json_objects(raw)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    raise ClaudeCLIError(f"Claude's response wasn't valid JSON: {raw[:1000]}")
