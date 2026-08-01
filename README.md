@@ -1,10 +1,18 @@
 # jobApplier
 
-A semi-automated LinkedIn job-search assistant: it searches for jobs matching your resume
-that were posted in the last 24 hours, tailors your resume and drafts a cover letter for
-each one with Claude, applies (Easy Apply flows are automated up to the final click, which
-you confirm yourself; external-site jobs get your documents prepared and the page opened
-for you to finish by hand), and logs every application to a CSV file.
+This repo was vibe coded with Claude Code.
+
+A semi-automated LinkedIn job-search assistant, with two ways to use it:
+
+1. **Full automation** (`linkedin_apply/`): searches LinkedIn for jobs matching your resume
+   posted in the last 24 hours, tailors your resume and drafts a cover letter for each one
+   with Claude, applies (Easy Apply flows are automated up to the final click, which you
+   confirm yourself; external-site jobs get your documents prepared and the page opened for
+   you to finish by hand), and logs every application to a CSV file.
+2. **Paste-a-JD tailoring** (`webapp/` + the browser extension): found a job manually, or
+   want one-click tailoring straight from a LinkedIn posting? Paste (or auto-detect) a job
+   description, get a fit score and keyword suggestions, approve the ones that are honestly
+   true, and generate a tailored resume/cover letter for it - no search automation involved.
 
 ## Why semi-automatic?
 
@@ -119,8 +127,44 @@ and the `claude /login` are machine-specific), and it'll pick up right where it 
 
 If you put this project under git: `master_resume.pdf` is tracked by default (so it travels
 with the repo) but contains your personal contact info - be mindful of that before pushing to
-any shared or public remote. `.env`, `screening_answers.yaml`, `applications.csv`, and
-everything generated at runtime are already gitignored.
+any shared or public remote. `.env`, `screening_answers.yaml`, `applications.csv`,
+`tailoring_log.csv`, and everything generated at runtime are already gitignored.
+
+## Web UI (paste-a-JD tailoring)
+
+An alternative to the full search/apply automation above: paste a job description directly
+and get a tailored resume/cover letter for it, without running any LinkedIn search.
+
+```bash
+source venv/bin/activate
+DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp.app
+```
+
+Open `http://127.0.0.1:5050`. There are two pages:
+
+- **Tailor**: paste a job description and click **Analyze fit**. This runs one fast Claude
+  call that returns a 0-10 match score, a chip list of JD keywords your resume already
+  demonstrates ("matched"), and a checklist of JD keywords that aren't literally in your
+  resume but are honestly connectable to something you've actually done ("suggested" - each
+  with a one-sentence reason). Check the ones you personally vouch for, optionally add
+  free-text notes, choose whether to generate the resume, cover letter, or both, then click
+  **Generate**. The match score is computed deterministically from these classified
+  keywords/requirements (not asked as a one-shot LLM judgment), so it won't drift between
+  runs on the same JD. Generating both documents runs as two concurrent Claude calls rather
+  than one, so it's not much slower than generating just one. The result shows what
+  specifically changed and a preview with the reworded text highlighted - the highlighting is
+  preview-only, the downloaded PDF is always clean.
+  - The tailoring guardrail is the same as the full automation flow: Claude can reword,
+    reorder, and re-emphasize existing resume content, but can never invent an employer,
+    date, skill, or metric that isn't already in your master resume. Approving a suggested
+    keyword is what lets it be woven in - it's you vouching it's true, not the model deciding
+    on its own.
+- **Search past applications**: ask things like "which resume did I use for Netflix" in a
+  simple chat box - this just does a local keyword search over the log below, no Claude call.
+
+Every paste-a-JD generation is logged to `data/tailoring_log.csv` (timestamp, company, title,
+location, resume/cover-letter paths, match score) - separate from `data/applications.csv`
+above, since these aren't necessarily submitted LinkedIn applications.
 
 ## Browser extension (optional)
 
@@ -143,6 +187,18 @@ Setup:
 Like `linkedin_apply/linkedin_search.py`/`linkedin_apply/apply_easy.py`, the DOM selectors it
 scrapes (`extension/content.js`, grouped as `SELECTORS` at the top) will need updating if
 LinkedIn's markup changes.
+
+## Project structure
+
+`src/jobapplier/` is split into three packages:
+- `common/` - shared by both flows: config loading, the `claude` CLI wrapper, resume
+  parsing (PDF -> JSON), and PDF rendering (JSON -> resume/cover-letter PDF).
+- `linkedin_apply/` - the full search/apply automation (`main.py` is its entry point).
+- `webapp/` - the paste-a-JD Flask app (`app.py` is its entry point) that the web UI and
+  browser extension both talk to.
+
+`extension/` (the Chrome extension) is separate from the Python package - it's plain
+JS/HTML/manifest files that call `webapp/app.py` over HTTP.
 
 ## Known limitations
 
