@@ -121,14 +121,14 @@ you'll never be shown or reapply to the same job twice.
 
 Everything needed lives under this project folder: `data/resume/master_resume.pdf` (your
 resume), `.env` (your config - gitignored), and `data/answers/screening_answers.yaml`
-(gitignored). Copy the whole folder to another machine, redo steps 1-3 above (dependencies
-and the `claude /login` are machine-specific), and it'll pick up right where it left off via
+(gitignored). Copy the whole folder to another machine (`master_resume.pdf` is gitignored, so
+copy it manually - it isn't in the repo), redo steps 1-3 above (dependencies and the
+`claude /login` are machine-specific), and it'll pick up right where it left off via
 `data/applications.csv`.
 
-If you put this project under git: `master_resume.pdf` is tracked by default (so it travels
-with the repo) but contains your personal contact info - be mindful of that before pushing to
-any shared or public remote. `.env`, `screening_answers.yaml`, `applications.csv`,
-`tailoring_log.csv`, and everything generated at runtime are already gitignored.
+`master_resume.pdf` contains your personal contact info, so it's gitignored rather than
+tracked - along with `.env`, `screening_answers.yaml`, `applications.csv`, `tailoring_log.csv`,
+and everything generated at runtime.
 
 ## Web UI (paste-a-JD tailoring)
 

@@ -7,6 +7,7 @@ data/generated/
 data/applications.csv
 data/tailoring_log.csv
 data/resume/master_resume.json
+data/resume/master_resume.pdf
 data/answers/screening_answers.yaml
 .DS_Store
 .idea/
