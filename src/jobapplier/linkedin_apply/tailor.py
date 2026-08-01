@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from jobapplier.claude_cli import call_claude_json
+from jobapplier.common.claude_cli import call_claude_json
 
 TAILOR_INSTRUCTIONS = """
 Do not use any tools (no file reads/writes, no bash, no web access) - just respond with the

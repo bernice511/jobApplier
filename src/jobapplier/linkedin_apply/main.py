@@ -5,12 +5,13 @@ from __future__ import annotations
 import sys
 from datetime import date
 
-from jobapplier import apply_easy, apply_external, resume_parser, tailor, tracker
-from jobapplier.config import GENERATED_DIR, load_config
-from jobapplier.linkedin_browser import ensure_logged_in, launch_browser
-from jobapplier.linkedin_search import search_jobs
-from jobapplier.rate_limiter import RateLimiter
-from jobapplier.resume_template import render_cover_letter, render_resume
+from jobapplier.common import resume_parser
+from jobapplier.common.config import GENERATED_DIR, load_config
+from jobapplier.common.resume_template import render_cover_letter, render_resume
+from jobapplier.linkedin_apply import apply_easy, apply_external, tailor, tracker
+from jobapplier.linkedin_apply.linkedin_browser import ensure_logged_in, launch_browser
+from jobapplier.linkedin_apply.linkedin_search import search_jobs
+from jobapplier.linkedin_apply.rate_limiter import RateLimiter
 
 
 def main() -> None:

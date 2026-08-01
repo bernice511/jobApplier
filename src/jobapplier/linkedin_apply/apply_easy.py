@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 from playwright.sync_api import Page
 
-from jobapplier.config import SCREENING_ANSWERS_PATH
+from jobapplier.common.config import SCREENING_ANSWERS_PATH
 
 SELECTORS = {
     "easy_apply_button": "button:has-text('Easy Apply')",

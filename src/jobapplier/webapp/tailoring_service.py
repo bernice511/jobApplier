@@ -27,11 +27,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from typing import Literal
 
-from jobapplier import resume_diff, resume_parser, tailoring_log
-from jobapplier.claude_cli import call_claude_json
-from jobapplier.config import GENERATED_DIR
-from jobapplier.resume_preview import render_resume_preview_html
-from jobapplier.resume_template import render_cover_letter, render_resume
+from jobapplier.common import resume_parser
+from jobapplier.common.claude_cli import call_claude_json
+from jobapplier.common.config import GENERATED_DIR
+from jobapplier.common.resume_template import render_cover_letter, render_resume
+from jobapplier.webapp import resume_diff, tailoring_log
+from jobapplier.webapp.resume_preview import render_resume_preview_html
 
 GenerateOption = Literal["both", "resume", "cover_letter"]
 

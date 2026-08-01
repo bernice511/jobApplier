@@ -6,7 +6,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime
 
-from jobapplier.config import DATA_DIR
+from jobapplier.common.config import DATA_DIR
 
 TAILORING_LOG_CSV = DATA_DIR / "tailoring_log.csv"
 

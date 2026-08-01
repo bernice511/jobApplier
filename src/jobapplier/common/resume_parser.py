@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pdfplumber
 
-from jobapplier.claude_cli import call_claude_json
-from jobapplier.config import MASTER_RESUME_JSON, MASTER_RESUME_PDF
+from jobapplier.common.claude_cli import call_claude_json
+from jobapplier.common.config import MASTER_RESUME_JSON, MASTER_RESUME_PDF
 
 SCHEMA_INSTRUCTIONS = """
 Do not use any tools (no file reads/writes, no bash, no web access) - just respond with the

@@ -1,7 +1,7 @@
 """Local web UI: paste a JD to get a tailored resume + cover letter, and a simple chat box
 to ask things like "which resume did I use for Netflix" against the tailoring log.
 
-Run with: PYTHONPATH=src DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobapplier.webapp
+Run with: PYTHONPATH=src DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobapplier.webapp.app
 """
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from jobapplier import tailoring_service
-from jobapplier.config import GENERATED_DIR
+from jobapplier.common.config import GENERATED_DIR
+from jobapplier.webapp import tailoring_service
 
 app = Flask(__name__)
 

@@ -40,7 +40,7 @@ own judgment about how aggressively to run this.
    Homebrew's libraries aren't always found automatically by macOS; if you hit an error like
    `cannot load library 'libgobject-2.0-0'`, run Python with:
    ```bash
-   DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobapplier.main
+   DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobapplier.linkedin_apply.main
    ```
 
 3. **Claude access**: this tool calls Claude via your existing Claude Code subscription
@@ -50,10 +50,10 @@ own judgment about how aggressively to run this.
    ```
    Verify it worked:
    ```bash
-   echo 'Reply with only: OK' | claude --bare -p
+   echo 'Reply with only: OK' | claude -p
    ```
    It should print `OK`. If it says "Not logged in", the login didn't stick in this shell -
-   retry `claude /login` from the exact terminal you'll use to run `jobapplier.main`.
+   retry `claude /login` from the exact terminal you'll use to run this tool.
 
 4. **Environment variables**
    ```bash
@@ -82,7 +82,7 @@ own judgment about how aggressively to run this.
 
 ```bash
 source venv/bin/activate
-DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.main
+DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.linkedin_apply.main
 ```
 
 A Chrome window will open. The first time, log into LinkedIn by hand in that window - the
@@ -128,29 +128,30 @@ everything generated at runtime are already gitignored.
 viewing (in your regular, everyday Chrome - not the dedicated automation profile above, so no
 separate LinkedIn login needed) and lets you tailor a resume/cover letter for it from a side
 panel, without copy-pasting the JD. It talks to the local web UI's Flask server
-(`jobapplier.webapp`) - it does **not** auto-fill or submit LinkedIn's Easy Apply form; that
-stays in the semi-automated `main.py` flow above by design (see "Why semi-automatic?").
+(`jobapplier.webapp.app`) - it does **not** auto-fill or submit LinkedIn's Easy Apply form;
+that stays in the semi-automated `linkedin_apply/main.py` flow above by design (see "Why
+semi-automatic?").
 
 Setup:
-1. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp`
+1. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp.app`
 2. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
    and select the `extension/` folder.
 3. Click the extension's toolbar icon to open its side panel, then open any LinkedIn job
    posting - it detects the title/company/location/description automatically (with a
    collapsible box to review/edit the description if extraction misses something).
 
-Like `linkedin_search.py`/`apply_easy.py`, the DOM selectors it scrapes
-(`extension/content.js`, grouped as `SELECTORS` at the top) will need updating if LinkedIn's
-markup changes.
+Like `linkedin_apply/linkedin_search.py`/`linkedin_apply/apply_easy.py`, the DOM selectors it
+scrapes (`extension/content.js`, grouped as `SELECTORS` at the top) will need updating if
+LinkedIn's markup changes.
 
 ## Known limitations
 
 - External-site applications are intentionally never auto-filled (see "Why semi-automatic?" above).
 - LinkedIn's page markup changes periodically; if searches start returning zero results or
-  the Easy Apply flow stops finding fields, the CSS selectors in `linkedin_search.py` and
-  `apply_easy.py` (grouped at the top of each file as `SELECTORS`) likely need updating to
-  match LinkedIn's current DOM.
-- Claude access goes through the `claude` CLI (`jobapplier/claude_cli.py`) using your Claude
+  the Easy Apply flow stops finding fields, the CSS selectors in `linkedin_apply/linkedin_search.py`
+  and `linkedin_apply/apply_easy.py` (grouped at the top of each file as `SELECTORS`) likely
+  need updating to match LinkedIn's current DOM.
+- Claude access goes through the `claude` CLI (`jobapplier/common/claude_cli.py`) using your Claude
   Code subscription login rather than a Console API key. This means: (1) it must be run from
   a terminal where `claude /login` has actually taken effect - a nested/sandboxed shell may
   not share that login even on the same machine; (2) it draws from the same usage as your

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from datetime import date
 
-from jobapplier.config import APPLICATIONS_CSV
+from jobapplier.common.config import APPLICATIONS_CSV
 
 FIELDNAMES = [
     "job_id", "title", "company", "location",
