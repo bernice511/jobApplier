@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "jobApplier Assistant",
+  "version": "0.1.0",
+  "description": "Reads the LinkedIn job you're viewing and tailors your resume/cover letter via your local jobApplier backend.",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": [
+    "*://*.linkedin.com/*",
+    "http://127.0.0.1:5050/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.linkedin.com/jobs/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "jobApplier - open panel"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  }
+}

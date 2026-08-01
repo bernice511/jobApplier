@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>jobApplier</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="app-header">
+    <h1>jobApplier</h1>
+  </div>
+
+  <div id="backend-warning" class="error-box" style="display:none;">
+    Can't reach the local jobApplier server at 127.0.0.1:5050. Start it with:
+    <code>python3 -m jobapplier.webapp</code>
+  </div>
+
+  <div class="card" id="detected-card">
+    <div class="hint" id="detected-status">Open a LinkedIn job posting to detect it here.</div>
+    <div id="detected-job" style="display:none;">
+      <div class="result-title" id="job-title"></div>
+      <div class="sub" id="job-company"></div>
+      <details>
+        <summary class="hint">Job description (click to review/edit)</summary>
+        <textarea id="jd-text"></textarea>
+      </details>
+      <button class="primary" id="analyze-btn">Analyze fit</button>
+    </div>
+  </div>
+
+  <div id="analyze-status"></div>
+  <div id="analyze-result"></div>
+  <div id="generate-result"></div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

@@ -122,6 +122,27 @@ with the repo) but contains your personal contact info - be mindful of that befo
 any shared or public remote. `.env`, `screening_answers.yaml`, `applications.csv`, and
 everything generated at runtime are already gitignored.
 
+## Browser extension (optional)
+
+`extension/` is a Manifest V3 Chrome extension that reads the LinkedIn job you're currently
+viewing (in your regular, everyday Chrome - not the dedicated automation profile above, so no
+separate LinkedIn login needed) and lets you tailor a resume/cover letter for it from a side
+panel, without copy-pasting the JD. It talks to the local web UI's Flask server
+(`jobapplier.webapp`) - it does **not** auto-fill or submit LinkedIn's Easy Apply form; that
+stays in the semi-automated `main.py` flow above by design (see "Why semi-automatic?").
+
+Setup:
+1. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp`
+2. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
+   and select the `extension/` folder.
+3. Click the extension's toolbar icon to open its side panel, then open any LinkedIn job
+   posting - it detects the title/company/location/description automatically (with a
+   collapsible box to review/edit the description if extraction misses something).
+
+Like `linkedin_search.py`/`apply_easy.py`, the DOM selectors it scrapes
+(`extension/content.js`, grouped as `SELECTORS` at the top) will need updating if LinkedIn's
+markup changes.
+
 ## Known limitations
 
 - External-site applications are intentionally never auto-filled (see "Why semi-automatic?" above).

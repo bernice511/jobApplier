@@ -15,6 +15,23 @@ from jobapplier.config import GENERATED_DIR
 app = Flask(__name__)
 
 
+@app.before_request
+def handle_preflight():
+    """Lets the browser extension's side panel (a chrome-extension:// origin) call this
+    local-only server. Bound to 127.0.0.1 by default (see main()), so a permissive CORS
+    policy here only matters to other processes on the same machine."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
 @app.get("/")
 def index():
     return render_template("tailor.html.jinja", active_page="tailor")
