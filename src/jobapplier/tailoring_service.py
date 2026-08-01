@@ -47,21 +47,45 @@ Return ONLY a JSON object with exactly six top-level keys: "company", "title", "
 
 "company"/"title"/"location": extracted from the job description (location null if not stated).
 
-"match_score": integer 0-10 - your honest estimate of how well the candidate's EXISTING,
-unmodified resume already overlaps this JD's key requirements. Do not inflate it.
+The two lists below use ONE decision rule: does the JD's term refer to the SAME underlying
+skill/technology/practice as something already in the resume (even if worded more generally,
+more specifically, or as a named example of a category the resume demonstrates), or a
+DIFFERENT skill/technology/practice that's merely related?
+- Same thing, different wording -> "matched_keywords" (a paraphrase needs no approval - e.g.
+  JD says "AI tools/platforms (e.g. Microsoft Copilot)", resume already shows hands-on work
+  with Claude/LangChain - Copilot is just a named example of the same category the resume
+  already demonstrates, so this is a match, not a suggestion).
+- Genuinely different thing, only related -> "suggested_keywords" (needs the candidate's
+  sign-off before use - e.g. JD says "Kafka streaming pipelines", resume shows Spark+Glue
+  BATCH ETL pipelines - related data-pipeline experience, but streaming and batch are not the
+  same thing, so this can't be silently claimed as a match).
 
 "matched_keywords": up to 8 short strings - JD-important terms/skills the master resume
-ALREADY genuinely demonstrates (verbatim or clearly equivalent).
+ALREADY genuinely demonstrates, including paraphrases per the rule above.
 
 "suggested_keywords": up to 8 objects {"term": str, "based_on": str} - JD-important terms
-the resume does NOT explicitly state, but which are honestly connectable to something the
-candidate has actually done. "term" is the JD's own language (e.g. "vector databases").
-"based_on" is a specific, one-sentence explanation of which existing master-resume experience
-could truthfully support this term (e.g. "Built a RAG pipeline over 100GB+ of biomedical data
-using OpenSearch, which is a vector search backend"). Only include a term if there is a real,
-specific, defensible connection - never suggest a term with no genuine basis in the resume,
-and never invent an experience just to justify one. If nothing honestly qualifies, return
-fewer than 8, including zero.
+that name a genuinely different skill/technology/practice than anything already in the
+resume, but which is honestly connectable to something the candidate has actually done.
+"term" is the JD's own language (e.g. "vector databases"). "based_on" is a specific,
+one-sentence explanation of which existing master-resume experience could truthfully support
+this term (e.g. "Built a RAG pipeline over 100GB+ of biomedical data using OpenSearch, which
+is a vector search backend"). Only include a term if there is a real, specific, defensible
+connection - never suggest a term with no genuine basis in the resume, and never invent an
+experience just to justify one. If nothing honestly qualifies, return fewer than 8, including
+zero. Do not put a term here if it belongs in matched_keywords per the rule above.
+
+"match_score": integer 0-10 - compute this FROM the coverage you just found in
+matched_keywords/suggested_keywords versus the JD's core/must-have requirements, don't pick a
+generic middling number out of caution. Use this rubric:
+- 9-10: resume already directly demonstrates nearly all of the JD's core requirements.
+- 7-8: resume directly covers most core requirements, with only minor/peripheral gaps.
+- 5-6: resume covers roughly half of the core requirements directly; real gaps remain.
+- 3-4: resume covers a few core requirements but has significant gaps in most key areas.
+- 0-2: little to no genuine overlap with the JD's core requirements.
+Weigh matched_keywords as full credit and suggested_keywords as partial credit (they're not
+in the resume yet, only honestly connectable). Do not inflate the score beyond what this
+coverage actually supports, but do not default low out of caution either - if the evidence
+supports a 7, say 7, not 5.
 
 Output ONLY the JSON object, exactly once - no commentary, no reasoning, no self-correction,
 no markdown code fences, and no second JSON object even if you reconsider partway through.
@@ -141,9 +165,15 @@ ATS and for human recruiters:
 - Keep every section from the input present in the output, in the same section order, and
   keep entries (companies/projects) within each section in the same order.
 
-"match_score" must be an integer 0-10: your honest estimate of how well the *tailored*
-resume's existing skills/experience overlap this JD's key requirements (keyword coverage,
-seniority, domain fit). Do not inflate it.
+"match_score" must be an integer 0-10, using this rubric based on how much of the JD's
+core/must-have requirements the *tailored* resume's real skills/experience actually cover:
+- 9-10: directly demonstrates nearly all core requirements.
+- 7-8: directly covers most core requirements, with only minor/peripheral gaps.
+- 5-6: covers roughly half the core requirements directly; real gaps remain.
+- 3-4: covers a few core requirements but has significant gaps in most key areas.
+- 0-2: little to no genuine overlap with the JD's core requirements.
+Do not inflate it beyond what the resume's real content supports, but don't default to a
+middling score out of caution either - if the coverage genuinely supports a 7, say 7.
 
 "changes" must be a list of 3-8 short strings, each describing one concrete edit you
 actually made and why. Do not list vague statements like "improved overall quality" - be

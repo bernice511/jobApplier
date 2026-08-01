@@ -116,7 +116,16 @@ function maybePublish() {
   if (key === lastKey) return;
   lastKey = key;
 
-  chrome.storage.local.set({ jobapplier_current_job: job });
+  try {
+    chrome.storage.local.set({ jobapplier_current_job: job });
+  } catch (err) {
+    // "Extension context invalidated" - this tab's content script is from a version of the
+    // extension that was reloaded/updated since injection (e.g. via chrome://extensions'
+    // reload button without also refreshing this tab). It's a stale, orphaned instance with
+    // no path back to a live extension context, so stop trying and stop the console noise -
+    // refreshing the page is what actually fixes it.
+    observer.disconnect();
+  }
 }
 
 // LinkedIn is a single-page app - clicking a different job in the results list swaps the
