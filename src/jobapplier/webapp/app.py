@@ -5,14 +5,18 @@ Run with: PYTHONPATH=src DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobappli
 """
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from jobapplier.common.config import GENERATED_DIR
+from jobapplier.common import resume_parser
+from jobapplier.common.config import GENERATED_DIR, MASTER_RESUME_JSON, MASTER_RESUME_PDF
 from jobapplier.webapp import tailoring_service
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB - generous for a resume PDF
 
 
 @app.before_request
@@ -42,7 +46,49 @@ def search_page():
     return render_template("search.html.jinja", active_page="search")
 
 
+@app.get("/resume")
+def resume_page():
+    return render_template("resume.html.jinja", active_page="resume")
+
+
 VALID_GENERATE_OPTIONS = {"both", "resume", "cover_letter"}
+
+
+@app.get("/api/resume/status")
+def api_resume_status():
+    if not MASTER_RESUME_PDF.exists():
+        return jsonify({"exists": False})
+
+    name = None
+    if MASTER_RESUME_JSON.exists():
+        try:
+            name = json.loads(MASTER_RESUME_JSON.read_text()).get("name")
+        except (json.JSONDecodeError, OSError):
+            name = None
+
+    updated_at = datetime.fromtimestamp(MASTER_RESUME_PDF.stat().st_mtime).isoformat(timespec="seconds")
+    return jsonify({"exists": True, "name": name, "updated_at": updated_at})
+
+
+@app.post("/api/resume/upload")
+def api_resume_upload():
+    file = request.files.get("resume")
+    if not file or not file.filename:
+        return jsonify({"error": "No file uploaded."}), 400
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Please upload a PDF file."}), 400
+
+    MASTER_RESUME_PDF.parent.mkdir(parents=True, exist_ok=True)
+    file.save(MASTER_RESUME_PDF)
+    if MASTER_RESUME_JSON.exists():
+        MASTER_RESUME_JSON.unlink()
+
+    try:
+        parsed = resume_parser.parse_and_cache(force=True)
+    except Exception as exc:
+        return jsonify({"error": f"Resume saved, but parsing failed: {exc}"}), 500
+
+    return jsonify({"name": parsed.get("name"), "sections": len(parsed.get("sections", []))})
 
 
 @app.post("/api/analyze")

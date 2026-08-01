@@ -1,0 +1,77 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<div class="card">
+  <h2>Master resume</h2>
+  <p class="hint">This is the source of truth used for all tailoring. Uploading a new PDF
+    replaces it and re-parses it immediately.</p>
+
+  <div id="resume-status" class="hint">Loading...</div>
+
+  <div style="margin-top: 1rem;">
+    <input type="file" id="resume-file" accept="application/pdf">
+  </div>
+  <div>
+    <button class="primary" id="upload-btn">Update resume</button>
+  </div>
+  <div id="upload-status"></div>
+  <div id="upload-result"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const resumeStatus = document.getElementById('resume-status');
+  const uploadBtn = document.getElementById('upload-btn');
+  const uploadStatus = document.getElementById('upload-status');
+  const uploadResult = document.getElementById('upload-result');
+
+  async function loadStatus() {
+    const resp = await fetch('/api/resume/status');
+    const data = await resp.json();
+    if (!data.exists) {
+      resumeStatus.textContent = 'No resume uploaded yet.';
+      return;
+    }
+    const when = new Date(data.updated_at).toLocaleString();
+    resumeStatus.textContent = `Current: ${data.name || '(parsed name unavailable)'} — last updated ${when}`;
+  }
+
+  uploadBtn.addEventListener('click', async () => {
+    const fileInput = document.getElementById('resume-file');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    uploadResult.innerHTML = '';
+    uploadBtn.disabled = true;
+    const timer = startLoading(uploadStatus, 'Uploading and parsing...');
+
+    const formData = new FormData();
+    formData.append('resume', file);
+
+    try {
+      const resp = await fetch('/api/resume/upload', { method: 'POST', body: formData });
+      const data = await resp.json();
+      clearInterval(timer);
+      uploadStatus.innerHTML = '';
+
+      if (!resp.ok) {
+        uploadResult.innerHTML = `<div class="error-box">${data.error || 'Something went wrong.'}</div>`;
+        return;
+      }
+
+      uploadResult.innerHTML = `<div class="hint">Updated - parsed "${data.name}" with ${data.sections} sections.</div>`;
+      fileInput.value = '';
+      loadStatus();
+    } catch (e) {
+      clearInterval(timer);
+      uploadStatus.innerHTML = '';
+      uploadResult.innerHTML = `<div class="error-box">${e}</div>`;
+    } finally {
+      uploadBtn.disabled = false;
+    }
+  });
+
+  loadStatus();
+</script>
+{% endblock %}
