@@ -200,6 +200,9 @@ async function onGenerate() {
         generate,
         approved_keywords: approvedKeywords,
         notes,
+        matched_keyword_count: (currentAnalysis.matched_keywords || []).length,
+        suggested_keyword_count: (currentAnalysis.suggested_keywords || []).length,
+        core_requirement_count: currentAnalysis.core_requirement_count || 0,
       }),
     });
     const data = await resp.json();

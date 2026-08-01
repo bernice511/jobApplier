@@ -67,6 +67,9 @@ def api_tailor():
     generate = body.get("generate", "both")
     approved_keywords = body.get("approved_keywords", [])
     notes = body.get("notes", "")
+    matched_keyword_count = body.get("matched_keyword_count", 0)
+    suggested_keyword_count = body.get("suggested_keyword_count", 0)
+    core_requirement_count = body.get("core_requirement_count", 0)
 
     if not jd_text or not company or not title:
         return jsonify({"error": "Run analyze first - missing jd_text/company/title."}), 400
@@ -77,6 +80,9 @@ def api_tailor():
         record = tailoring_service.tailor_from_jd(
             jd_text, company, title, location,
             generate=generate, approved_keywords=approved_keywords, notes=notes,
+            matched_keyword_count=matched_keyword_count,
+            suggested_keyword_count=suggested_keyword_count,
+            core_requirement_count=core_requirement_count,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

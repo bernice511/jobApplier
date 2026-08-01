@@ -10,3 +10,4 @@ data/resume/master_resume.json
 data/answers/screening_answers.yaml
 .DS_Store
 .idea/
+.claude/

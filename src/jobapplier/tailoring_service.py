@@ -42,50 +42,46 @@ JSON described below, nothing else.
 You are given a raw, pasted job description and a candidate's master resume. This is an
 ANALYSIS pass only - do not rewrite the resume yet.
 
-Return ONLY a JSON object with exactly six top-level keys: "company", "title", "location",
-"match_score", "matched_keywords", "suggested_keywords".
+Return ONLY a JSON object with exactly four top-level keys: "company", "title", "location",
+"requirements".
 
 "company"/"title"/"location": extracted from the job description (location null if not stated).
 
-The two lists below use ONE decision rule: does the JD's term refer to the SAME underlying
+"requirements": a list covering EVERY distinct core/must-have or clearly important
+requirement or skill the JD states (scan its Required/Minimum/Desired Qualifications sections
+and any other requirement-bearing text) - list all of them, don't stop at a round number and
+don't skip any to keep the list short; this list is the sole basis for the match score, so an
+incomplete list understates it and a padded one inflates it. Each item:
+{"requirement": str, "status": "matched" | "suggested" | "unmet", "detail": str | null}
+
+"requirement" must be a SHORT, crisp ATS-style keyword or phrase (2-6 words, e.g. "vector
+databases", "responsible AI", "data governance", "process mapping") - NOT the full JD
+sentence copied verbatim. JD bullets often bundle several distinct skills into one sentence
+(e.g. "implementing an AI best practice (workflow enhancement, responsible AI controls, data
+governance, automation)") - split a bundled sentence like that into separate atomic items
+("workflow enhancement", "responsible AI", "data governance", "automation"), one requirement
+each, rather than one long item containing all of them. This list is shown to the candidate
+as keyword chips/checkboxes, so length and atomicity both matter, not just coverage.
+
+"status" uses ONE decision rule: does this requirement refer to the SAME underlying
 skill/technology/practice as something already in the resume (even if worded more generally,
-more specifically, or as a named example of a category the resume demonstrates), or a
-DIFFERENT skill/technology/practice that's merely related?
-- Same thing, different wording -> "matched_keywords" (a paraphrase needs no approval - e.g.
-  JD says "AI tools/platforms (e.g. Microsoft Copilot)", resume already shows hands-on work
-  with Claude/LangChain - Copilot is just a named example of the same category the resume
-  already demonstrates, so this is a match, not a suggestion).
-- Genuinely different thing, only related -> "suggested_keywords" (needs the candidate's
-  sign-off before use - e.g. JD says "Kafka streaming pipelines", resume shows Spark+Glue
-  BATCH ETL pipelines - related data-pipeline experience, but streaming and batch are not the
-  same thing, so this can't be silently claimed as a match).
+more specifically, or as a named example of a category the resume demonstrates), a
+DIFFERENT skill/technology/practice that's merely related, or nothing at all?
+- "matched": same thing, different wording - a paraphrase needs no approval (e.g. JD says
+  "AI tools/platforms (e.g. Microsoft Copilot)", resume already shows hands-on work with
+  Claude/LangChain - Copilot is just a named example of the same category the resume already
+  demonstrates).
+- "suggested": genuinely different thing, only related - needs the candidate's sign-off
+  before use (e.g. JD says "Kafka streaming pipelines", resume shows Spark+Glue BATCH ETL
+  pipelines - related data-pipeline experience, but streaming and batch aren't the same
+  thing, so this can't be silently claimed). Only use this status if there's a real, specific,
+  defensible connection - never invent one just to avoid "unmet".
+- "unmet": no genuine connection to anything in the resume.
 
-"matched_keywords": up to 8 short strings - JD-important terms/skills the master resume
-ALREADY genuinely demonstrates, including paraphrases per the rule above.
-
-"suggested_keywords": up to 8 objects {"term": str, "based_on": str} - JD-important terms
-that name a genuinely different skill/technology/practice than anything already in the
-resume, but which is honestly connectable to something the candidate has actually done.
-"term" is the JD's own language (e.g. "vector databases"). "based_on" is a specific,
-one-sentence explanation of which existing master-resume experience could truthfully support
-this term (e.g. "Built a RAG pipeline over 100GB+ of biomedical data using OpenSearch, which
-is a vector search backend"). Only include a term if there is a real, specific, defensible
-connection - never suggest a term with no genuine basis in the resume, and never invent an
-experience just to justify one. If nothing honestly qualifies, return fewer than 8, including
-zero. Do not put a term here if it belongs in matched_keywords per the rule above.
-
-"match_score": integer 0-10 - compute this FROM the coverage you just found in
-matched_keywords/suggested_keywords versus the JD's core/must-have requirements, don't pick a
-generic middling number out of caution. Use this rubric:
-- 9-10: resume already directly demonstrates nearly all of the JD's core requirements.
-- 7-8: resume directly covers most core requirements, with only minor/peripheral gaps.
-- 5-6: resume covers roughly half of the core requirements directly; real gaps remain.
-- 3-4: resume covers a few core requirements but has significant gaps in most key areas.
-- 0-2: little to no genuine overlap with the JD's core requirements.
-Weigh matched_keywords as full credit and suggested_keywords as partial credit (they're not
-in the resume yet, only honestly connectable). Do not inflate the score beyond what this
-coverage actually supports, but do not default low out of caution either - if the evidence
-supports a 7, say 7, not 5.
+"detail": for "matched", a brief note of which existing resume content demonstrates it; for
+"suggested", a specific one-sentence explanation of which existing experience could
+truthfully support it (e.g. "Built a RAG pipeline over 100GB+ of biomedical data using
+OpenSearch, which is a vector search backend"); for "unmet", null.
 
 Output ONLY the JSON object, exactly once - no commentary, no reasoning, no self-correction,
 no markdown code fences, and no second JSON object even if you reconsider partway through.
@@ -165,16 +161,6 @@ ATS and for human recruiters:
 - Keep every section from the input present in the output, in the same section order, and
   keep entries (companies/projects) within each section in the same order.
 
-"match_score" must be an integer 0-10, using this rubric based on how much of the JD's
-core/must-have requirements the *tailored* resume's real skills/experience actually cover:
-- 9-10: directly demonstrates nearly all core requirements.
-- 7-8: directly covers most core requirements, with only minor/peripheral gaps.
-- 5-6: covers roughly half the core requirements directly; real gaps remain.
-- 3-4: covers a few core requirements but has significant gaps in most key areas.
-- 0-2: little to no genuine overlap with the JD's core requirements.
-Do not inflate it beyond what the resume's real content supports, but don't default to a
-middling score out of caution either - if the coverage genuinely supports a 7, say 7.
-
 "changes" must be a list of 3-8 short strings, each describing one concrete edit you
 actually made and why. Do not list vague statements like "improved overall quality" - be
 specific about what moved or was reworded.
@@ -216,6 +202,18 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_") or "job"
 
 
+def _compute_match_score(matched_count: int, suggested_count: int, core_requirement_count: int) -> int:
+    """Deterministic 0-10 score: matched keywords count as full coverage, suggested ones (not
+    yet in the resume, only honestly connectable) count as half - computed from counts rather
+    than asked as a holistic LLM judgment, since that produced different scores (e.g. 6 vs 8)
+    across identical runs on the same JD/resume. core_requirement_count is the denominator
+    (total distinct requirements the JD lists); falls back to the keyword counts themselves if
+    Claude didn't return a usable one, so a missing/zero value never divides by zero."""
+    denominator = core_requirement_count if core_requirement_count > 0 else max(matched_count + suggested_count, 1)
+    coverage = (matched_count + 0.5 * suggested_count) / denominator
+    return max(0, min(10, round(coverage * 10)))
+
+
 def analyze_jd(jd_text: str) -> dict:
     """Fast pass: company/title/location + fit score + honest keyword suggestions, with no
     resume rewriting yet. Meant to return quickly so the UI has something to show well before
@@ -227,13 +225,25 @@ def analyze_jd(jd_text: str) -> dict:
         .replace("{jd_text}", jd_text)
     )
     result = call_claude_json(prompt)
+    requirements = result.get("requirements", [])
+    matched_keywords = [r["requirement"] for r in requirements if r.get("status") == "matched"]
+    suggested_keywords = [
+        {"term": r["requirement"], "based_on": r.get("detail") or ""}
+        for r in requirements if r.get("status") == "suggested"
+    ]
+    # Every requirement is classified exactly once (matched/suggested/unmet), so this count
+    # can never be smaller than matched+suggested - unlike asking for three independent lists,
+    # which could disagree and let the score below saturate past what the evidence supports.
+    core_requirement_count = len(requirements)
+
     return {
         "company": result.get("company") or "Unknown Company",
         "title": result.get("title") or "Unknown Title",
         "location": result.get("location") or "",
-        "match_score": result.get("match_score"),
-        "matched_keywords": result.get("matched_keywords", []),
-        "suggested_keywords": result.get("suggested_keywords", []),
+        "match_score": _compute_match_score(len(matched_keywords), len(suggested_keywords), core_requirement_count),
+        "matched_keywords": matched_keywords,
+        "suggested_keywords": suggested_keywords,
+        "core_requirement_count": core_requirement_count,
     }
 
 
@@ -248,7 +258,7 @@ def _build_prompt(
     notes: str,
 ) -> str:
     if kind == "resume":
-        keys = ["resume", "match_score", "changes"]
+        keys = ["resume", "changes"]
         task_sentence = "Tailor a candidate's resume for the job described below."
         body = RESUME_BLOCK
     else:
@@ -312,9 +322,17 @@ def tailor_from_jd(
     generate: GenerateOption = "both",
     approved_keywords: list[dict] | None = None,
     notes: str = "",
+    matched_keyword_count: int = 0,
+    suggested_keyword_count: int = 0,
+    core_requirement_count: int = 0,
 ) -> dict:
     """Generates the resume and/or cover letter for a job already identified by analyze_jd().
-    When generate="both", the two calls run concurrently instead of as one merged call."""
+    When generate="both", the two calls run concurrently instead of as one merged call.
+
+    matched_keyword_count/suggested_keyword_count/core_requirement_count come from that same
+    analyze_jd() call, so the match score can be recomputed deterministically here (approved
+    keywords move from "suggested" to "matched" credit) instead of asking Claude to judge the
+    tailored resume's fit all over again - see _compute_match_score's docstring for why."""
     approved_keywords = approved_keywords or []
     want_resume = generate in ("both", "resume")
     want_cover = generate in ("both", "cover_letter")
@@ -344,13 +362,19 @@ def tailor_from_jd(
         )
 
     slug = f"{_slugify(company)}_{_slugify(title)}_{datetime.now():%Y%m%d%H%M%S}"
+    # Approved keywords are now genuinely woven into the resume, so they've earned full
+    # credit instead of the suggested/half-credit they had at analyze time.
+    final_matched = matched_keyword_count + len(approved_keywords)
+    final_suggested = max(suggested_keyword_count - len(approved_keywords), 0)
+    match_score = _compute_match_score(final_matched, final_suggested, core_requirement_count)
+
     record = {
         "company": company,
         "title": title,
         "location": location,
         "resume_path": "",
         "cover_letter_path": "",
-        "match_score": resume_result.get("match_score") if resume_result else "",
+        "match_score": match_score,
     }
     extra = {"changes": [], "resume_preview_html": ""}
 
