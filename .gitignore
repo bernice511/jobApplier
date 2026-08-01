@@ -9,6 +9,7 @@ data/tailoring_log.csv
 data/resume/master_resume.json
 data/resume/master_resume.pdf
 data/answers/screening_answers.yaml
+data/answers/screening_answers.example.yaml
 .DS_Store
 .idea/
 .claude/
