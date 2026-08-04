@@ -9,9 +9,32 @@ session even when the user's own terminal is logged in.
 
 Deliberately NOT using `--bare`: per `claude --help`, bare mode reads auth strictly from
 ANTHROPIC_API_KEY/apiKeyHelper and never from OAuth/keychain, which breaks subscription
-login entirely (the whole point of going through the CLI instead of a Console API key). No
-`--allowedTools` is passed, which leaves tool use (Bash/Read/Write/etc.) unavailable for
-this headless call - we only want a plain text/JSON response back.
+login entirely (the whole point of going through the CLI instead of a Console API key).
+
+Every call also passes:
+- `--tools ""` - no tool use (these prompts are plain JSON-in, JSON-out already).
+- `--safe-mode` - skips CLAUDE.md/hooks/plugins/MCP discovery. Unlike `--bare`, this does
+  NOT restrict auth to API-key-only (confirmed via `claude --help`: "Auth, model selection,
+  built-in tools... work normally"), so OAuth/subscription login still works.
+- `--no-session-persistence` - skip writing a session transcript for these one-shot calls.
+
+Deliberately NOT using `--effort low`: it looked like a speed win in isolation, but on a real
+classify_batch call it silently DROPPED batch items from the response instead of just being
+more conservative about matched-vs-suggested - 2 of 4 items vanished (not even classified as
+"unmet"), at both default and custom system prompts. That's a correctness bug, not a
+speed/quality tradeoff, so it's not used even though it measured faster.
+
+Benchmarked on a trivial prompt: the old bare `claude -p --output-format json` invocation
+took ~2.85s wall time, ~25k cached input tokens (the full default system prompt + tool
+schemas, even though the prompt itself says "do not use any tools"), and 2 model calls (an
+internal auto-mode classifier, then the real answer) at ~$0.008. With the flags above:
+~1.9s wall, 177 input tokens, 1 model call, ~$0.0004.
+
+`model` and `system_prompt` are optional per-call overrides (`--model` / `--system-prompt` -
+the latter REPLACES the default system prompt rather than appending to it, unlike
+`--append-system-prompt`). Left unset, a call uses whatever the CLI's default model/system
+prompt are today, so resume_parser.py's structuring call and tailor.py/tailoring_service.py's
+resume/cover-letter generation are unaffected unless a caller explicitly opts in.
 """
 from __future__ import annotations
 
@@ -25,13 +48,32 @@ class ClaudeCLIError(RuntimeError):
     pass
 
 
-def call_claude(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS) -> str:
+def _build_argv(model: str | None, system_prompt: str | None) -> list[str]:
+    argv = [
+        "claude", "-p", "--output-format", "json",
+        "--tools", "",
+        "--safe-mode",
+        "--no-session-persistence",
+    ]
+    if model:
+        argv += ["--model", model]
+    if system_prompt:
+        argv += ["--system-prompt", system_prompt]
+    return argv
+
+
+def call_claude(
+    prompt: str,
+    timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS,
+    model: str | None = None,
+    system_prompt: str | None = None,
+) -> str:
     """Sends `prompt` to `claude` via stdin in headless mode and returns the plain text
     response. Raises ClaudeCLIError on any failure (not logged in, non-zero exit, timeout,
     unparseable output, etc.)."""
     try:
         proc = subprocess.run(
-            ["claude", "-p", "--output-format", "json"],
+            _build_argv(model, system_prompt),
             input=prompt,
             capture_output=True,
             text=True,
@@ -89,7 +131,12 @@ def _find_json_objects(text: str) -> list[str]:
     return spans
 
 
-def call_claude_json(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS) -> dict:
+def call_claude_json(
+    prompt: str,
+    timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS,
+    model: str | None = None,
+    system_prompt: str | None = None,
+) -> dict:
     """Like call_claude, but strips markdown code fences (if present) and parses the
     result as JSON. Raises ClaudeCLIError if the response isn't valid JSON.
 
@@ -98,7 +145,9 @@ def call_claude_json(prompt: str, timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECO
     without silently accepting garbage, if a plain parse of the whole response fails, this
     falls back to scanning for balanced {...} objects and trying the LAST one first (it's
     the self-corrected final answer), then earlier ones, before giving up."""
-    raw = call_claude(prompt, timeout_seconds=timeout_seconds).strip()
+    raw = call_claude(
+        prompt, timeout_seconds=timeout_seconds, model=model, system_prompt=system_prompt
+    ).strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
     try:
