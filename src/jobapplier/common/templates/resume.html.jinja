@@ -3,24 +3,52 @@
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: Letter; margin: 0.3in 0.5in; }
+  @page {
+    size: Letter;
+    margin: {{ style.margin_top_in }}in {{ style.margin_right_in }}in
+            {{ style.margin_bottom_in }}in {{ style.margin_left_in }}in;
+  }
   * { box-sizing: border-box; }
   body {
-    font-family: Georgia, "Times New Roman", Times, serif;
-    font-size: 9.3pt;
-    line-height: 1.08;
-    color: #111;
+    font-family: {{ style.body_font_family }};
+    font-size: {{ style.body_font_size_pt }}pt;
+    line-height: {{ style.line_height }};
+    color: {{ style.text_color }};
   }
   .header { text-align: center; margin-bottom: 3pt; }
-  .name { font-size: 16.5pt; font-weight: bold; letter-spacing: 0.5pt; }
-  .contact { font-size: 8.8pt; margin-top: 0pt; }
-  .contact a { color: #111; text-decoration: none; }
-  .section-title {
-    font-size: 10pt;
+  .header-with-photo {
+    display: flex;
+    align-items: center;
+    gap: 10pt;
+    text-align: center;
+    margin-bottom: 3pt;
+    flex-direction: {{ 'row-reverse' if style.photo_side == 'right' else 'row' }};
+  }
+  .header-with-photo .header-text { flex: 1; }
+  .photo {
+    width: {{ style.photo_width_pt }}pt;
+    height: {{ style.photo_height_pt }}pt;
+    object-fit: cover;
+    border-radius: 3pt;
+    flex-shrink: 0;
+  }
+  .name {
+    font-size: {{ style.name_font_size_pt }}pt;
     font-weight: bold;
-    text-transform: uppercase;
     letter-spacing: 0.5pt;
-    border-bottom: 0.75pt solid #111;
+    color: {{ style.name_color }};
+  }
+  .contact { font-size: {{ style.body_font_size_pt - 0.5 }}pt; margin-top: 0pt; color: {{ style.contact_color }}; }
+  .contact a { color: {{ style.contact_color }}; text-decoration: none; }
+  .section-title {
+    font-size: {{ style.section_title_font_size_pt }}pt;
+    font-weight: {{ 'bold' if style.section_title_bold else 'normal' }};
+    text-transform: {{ 'uppercase' if style.section_title_uppercase else 'none' }};
+    letter-spacing: 0.5pt;
+    color: {{ style.section_title_color }};
+    {% if style.section_title_underline -%}
+    border-bottom: 0.75pt solid {{ style.text_color }};
+    {%- endif %}
     margin-top: 4pt;
     margin-bottom: 2pt;
     padding-bottom: 0.5pt;
@@ -44,10 +72,20 @@
 </style>
 </head>
 <body>
+  {% if style.photo_data_uri %}
+  <div class="header-with-photo">
+    <img class="photo" src="{{ style.photo_data_uri }}" alt="">
+    <div class="header-text">
+      <div class="name">{{ name }}</div>
+      <div class="contact">{{ contact | join(' | ') }}</div>
+    </div>
+  </div>
+  {% else %}
   <div class="header">
     <div class="name">{{ name }}</div>
     <div class="contact">{{ contact | join(' | ') }}</div>
   </div>
+  {% endif %}
 
   {% for section in sections %}
   <div class="section-title">{{ section.title }}</div>

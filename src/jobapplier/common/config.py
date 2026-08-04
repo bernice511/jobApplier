@@ -16,6 +16,8 @@ GENERATED_DIR = DATA_DIR / "generated"
 
 MASTER_RESUME_PDF = RESUME_DIR / "master_resume.pdf"
 MASTER_RESUME_JSON = RESUME_DIR / "master_resume.json"
+MASTER_RESUME_STYLE_JSON = RESUME_DIR / "master_resume_style.json"
+MASTER_RESUME_PHOTO = RESUME_DIR / "master_resume_photo.png"
 SCREENING_ANSWERS_PATH = ANSWERS_DIR / "screening_answers.yaml"
 APPLICATIONS_CSV = DATA_DIR / "applications.csv"
 
