@@ -20,6 +20,8 @@ MASTER_RESUME_STYLE_JSON = RESUME_DIR / "master_resume_style.json"
 MASTER_RESUME_PHOTO = RESUME_DIR / "master_resume_photo.png"
 SCREENING_ANSWERS_PATH = ANSWERS_DIR / "screening_answers.yaml"
 APPLICATIONS_CSV = DATA_DIR / "applications.csv"
+JOB_ALERTS_JSON = DATA_DIR / "job_alerts.json"
+LOGS_DIR = DATA_DIR / "logs"
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -53,6 +55,15 @@ class Config:
             os.getenv("BROWSER_PROFILE_DIR") or str(DATA_DIR / "browser_profile")
         )
     )
+    adzuna_app_id: str = field(default_factory=lambda: os.getenv("ADZUNA_APP_ID", ""))
+    adzuna_app_key: str = field(default_factory=lambda: os.getenv("ADZUNA_APP_KEY", ""))
+    adzuna_country: str = field(default_factory=lambda: os.getenv("ADZUNA_COUNTRY", "us"))
+    alert_match_threshold: int = field(
+        default_factory=lambda: int(os.getenv("ALERT_MATCH_THRESHOLD", "6"))
+    )
+    max_jobs_to_score_per_run: int = field(
+        default_factory=lambda: int(os.getenv("MAX_JOBS_TO_SCORE_PER_RUN", "40"))
+    )
 
     def validate(self) -> list[str]:
         """Returns a list of human-readable problems; empty list means config is OK."""
@@ -68,8 +79,22 @@ class Config:
             )
         if self.min_delay_seconds > self.max_delay_seconds:
             problems.append("MIN_DELAY_SECONDS must be <= MAX_DELAY_SECONDS")
-        if not MASTER_RESUME_PDF.exists():
-            problems.append(f"Master resume not found at {MASTER_RESUME_PDF}")
+        from jobapplier.common import resume_store  # deferred: resume_store imports this module
+        if resume_store.get_active() is None:
+            problems.append(
+                "No active resume set - upload a resume and mark it active on the Resume page"
+            )
+        return problems
+
+    def validate_job_alerts(self) -> list[str]:
+        """Separate from validate() since the job-alerts pipeline is optional and has its own
+        prerequisites (an Adzuna account) that the LinkedIn auto-apply flow doesn't need."""
+        problems = self.validate()
+        if not self.adzuna_app_id or not self.adzuna_app_key:
+            problems.append(
+                "ADZUNA_APP_ID/ADZUNA_APP_KEY are empty - sign up for a free API key at "
+                "https://developer.adzuna.com and set them in .env"
+            )
         return problems
 
 

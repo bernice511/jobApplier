@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from datetime import date
 
-from jobapplier.common import resume_parser
+from jobapplier.common import resume_parser, resume_store
 from jobapplier.common.config import GENERATED_DIR, load_config
 from jobapplier.common.resume_template import render_cover_letter, render_resume
 from jobapplier.linkedin_apply import apply_easy, apply_external, tailor, tracker
@@ -25,7 +25,8 @@ def main() -> None:
         sys.exit(1)
 
     print("Parsing/loading master resume...")
-    master_resume = resume_parser.parse_and_cache()
+    active_paths = resume_store.get_active_paths()
+    master_resume = resume_parser.parse_and_cache(**active_paths)
 
     already_seen_ids = tracker.load_applied_job_ids()
     print(f"{len(already_seen_ids)} previously-tracked jobs will be skipped.")
@@ -61,8 +62,14 @@ def main() -> None:
 
             resume_pdf = GENERATED_DIR / f"{job['job_id']}_resume.pdf"
             cover_letter_pdf = GENERATED_DIR / f"{job['job_id']}_cover_letter.pdf"
-            render_resume(tailored["resume"], resume_pdf)
-            render_cover_letter(tailored["cover_letter"], cover_letter_pdf)
+            render_resume(
+                tailored["resume"], resume_pdf,
+                style_json_path=active_paths["style_json_path"], photo_path=active_paths["photo_path"],
+            )
+            render_cover_letter(
+                tailored["cover_letter"], cover_letter_pdf,
+                style_json_path=active_paths["style_json_path"], photo_path=active_paths["photo_path"],
+            )
 
             if job["easy_apply"]:
                 status = apply_easy.apply_easy(page, resume_pdf, job["title"], job["company"])

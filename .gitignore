@@ -10,7 +10,11 @@ data/resume/master_resume.json
 data/resume/master_resume.pdf
 data/resume/master_resume_style.json
 data/resume/master_resume_photo.png
+data/resume/resumes.json
+data/resume/*/
 data/analyze_cache.json
+data/job_alerts.json
+data/logs/
 data/answers/screening_answers.yaml
 data/answers/screening_answers.example.yaml
 .DS_Store

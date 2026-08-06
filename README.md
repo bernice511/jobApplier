@@ -170,11 +170,35 @@ above, since these aren't necessarily submitted LinkedIn applications.
 
 `extension/` is a Manifest V3 Chrome extension that reads the job you're currently viewing (in
 your regular, everyday Chrome - not the dedicated automation profile above, so no separate
-LinkedIn login needed) and lets you tailor a resume/cover letter for it from a side panel,
-without copy-pasting the JD. It talks to the local web UI's Flask server
-(`jobapplier.webapp.app`) - it does **not** auto-fill or submit an application form; that
-stays in the semi-automated `linkedin_apply/main.py` flow above by design (see "Why
-semi-automatic?").
+LinkedIn login needed), lets you tailor a resume/cover letter for it from a side panel without
+copy-pasting the JD, and can **fill in the application form** on the page for you. It talks to
+the local web UI's Flask server (`jobapplier.webapp.app`).
+
+**Autofill boundary - read before using it:** the extension fills form fields but **never
+clicks Submit/Apply/Next/Review** and never auto-advances a multi-step form - you always
+review and submit by hand. It also **never auto-checks consent/certification/terms
+checkboxes** (an explicit denylist in `extension/autofill.js` skips anything matching
+"certify," "agree," "consent," "terms," etc. before it ever reaches the answer-matching
+logic) and **never fabricates an answer** to a free-text question it can't confidently match -
+unmatched questions are surfaced in the side panel for you to answer yourself, with an
+optional "Save answer" so it's remembered next time (same self-growing `patterns` map
+`linkedin_apply/apply_easy.py` already uses in `data/answers/screening_answers.yaml`, now
+shared via `common/screening_answers.py`). Every field it does fill gets a visible outline so
+a wrong match is easy to catch during review, not something to accidentally skim past. This
+is a deliberate, but real, departure from earlier versions of this project (which framed the
+extension as intentionally scrape-only, contrasting it with the semi-automated
+`linkedin_apply/main.py` flow's own confirm-before-submit gate) - the *no-auto-submit*
+half of that safety posture stays fully intact, only the *never-fills-anything* half changes.
+
+Known gaps: file upload only works if the page has a real `<input type="file">` - some ATS
+platforms use custom drag-and-drop widgets with no such element, and those get reported as
+"attach manually" rather than faked. Indeed in particular sometimes redirects "Apply" to a
+different domain the extension was never given access to; if that happens, open the actual
+application page and retry rather than the job listing page. Field-matching selectors for
+Indeed/Greenhouse/Lever/Workday's *application forms* (as opposed to their job-description
+pages, which are checked against real markup) are a generic label-based fallback, not
+confirmed against a live page of each - expect to iterate here the same way the JD-scraper
+selectors below did.
 
 Supported sites: LinkedIn, Indeed, Greenhouse, Lever, and Workday. Each has its own extractor
 in `extension/content.js` (`SITE_EXTRACTORS`); anything a site-specific extractor misses (or
@@ -184,17 +208,22 @@ coming back empty. Company/title/location mis-detection isn't fatal even then - 
 matters most for the description text, not those fields.
 
 Setup:
-1. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp.app`
-2. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
+1. Copy `data/answers/screening_answers.example.yaml` to `data/answers/screening_answers.yaml`
+   and fill in your real answers, if you haven't already for the `linkedin_apply/` flow -
+   autofill reads the same file.
+2. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp.app`
+3. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
    and select the `extension/` folder.
-3. Click the extension's toolbar icon to open its side panel, then open any job posting on a
+4. Click the extension's toolbar icon to open its side panel, then open any job posting on a
    supported site - it detects the title/company/location/description automatically (with a
-   collapsible box to review/edit the description if extraction misses something).
+   collapsible box to review/edit the description if extraction misses something). After
+   generating a resume/cover letter, an "Autofill this application" button appears.
 
 Like `linkedin_apply/linkedin_search.py`/`linkedin_apply/apply_easy.py`, the DOM selectors
-each site's extractor uses in `extension/content.js` will need updating if that site's markup
-changes - the Indeed/Greenhouse/Lever/Workday ones in particular are based on each platform's
-typical markup, not confirmed against a live page of each, so expect to iterate on them.
+each site's extractor uses in `extension/content.js`/`extension/autofill.js` will need
+updating if that site's markup changes - the Indeed/Greenhouse/Lever/Workday ones in
+particular are based on each platform's typical markup, not confirmed against a live page of
+each, so expect to iterate on them.
 
 ## Project structure
 

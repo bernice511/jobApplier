@@ -2,17 +2,18 @@
 
 {% block content %}
 <div class="card">
-  <h2>Master resume</h2>
-  <p class="hint">This is the source of truth used for all tailoring. Uploading a new PDF
-    replaces it and re-parses it immediately.</p>
+  <h2>Your resumes</h2>
+  <p class="hint">Upload one or more resumes, then mark one as active - that's the one used
+    for tailoring, job alerts, and the LinkedIn auto-apply flow.</p>
+  <div id="resume-list"></div>
+</div>
 
-  <div id="resume-status" class="hint">Loading...</div>
-
-  <div style="margin-top: 1rem;">
-    <input type="file" id="resume-file" accept="application/pdf">
-  </div>
+<div class="card">
+  <h2>Add a resume</h2>
+  <input type="text" id="display-name" placeholder="Name this resume (e.g. \"Backend focus\")" style="width:100%; margin-bottom:0.6rem; padding:0.55rem 0.7rem; font-size:0.9rem; color:var(--text-1); background:var(--page); border:1px solid var(--border); border-radius:8px;">
+  <input type="file" id="resume-file" accept="application/pdf">
   <div>
-    <button class="primary" id="upload-btn">Update resume</button>
+    <button class="primary" id="upload-btn">Add resume</button>
   </div>
   <div id="upload-status"></div>
   <div id="upload-result"></div>
@@ -21,20 +22,58 @@
 
 {% block scripts %}
 <script>
-  const resumeStatus = document.getElementById('resume-status');
+  const resumeList = document.getElementById('resume-list');
   const uploadBtn = document.getElementById('upload-btn');
   const uploadStatus = document.getElementById('upload-status');
   const uploadResult = document.getElementById('upload-result');
 
-  async function loadStatus() {
-    const resp = await fetch('/api/resume/status');
+  function renderResumeCard(entry) {
+    const div = document.createElement('div');
+    div.className = 'result-card';
+    div.style.marginBottom = '0.6rem';
+    const when = new Date(entry.uploaded_at).toLocaleString();
+    div.innerHTML = `
+      <div class="meta">${entry.display_name} ${entry.is_active ? '<span class="chip">Active</span>' : ''}</div>
+      <div class="sub">Added ${when}</div>
+      <div class="downloads">
+        <a class="pill-link" href="/resume-files/${entry.id}" target="_blank">View PDF</a>
+        ${entry.is_active ? '' : `<button class="secondary activate-btn">Set as active</button>`}
+        <button class="secondary delete-btn">Delete</button>
+      </div>
+    `;
+    if (!entry.is_active) {
+      div.querySelector('.activate-btn').addEventListener('click', () => activate(entry.id));
+    }
+    div.querySelector('.delete-btn').addEventListener('click', () => remove(entry.id));
+    return div;
+  }
+
+  async function loadResumes() {
+    const resp = await fetch('/api/resumes');
     const data = await resp.json();
-    if (!data.exists) {
-      resumeStatus.textContent = 'No resume uploaded yet.';
+    resumeList.innerHTML = '';
+    const resumes = data.resumes || [];
+    if (!resumes.length) {
+      resumeList.innerHTML = '<div class="hint">No resumes yet - add one below.</div>';
       return;
     }
-    const when = new Date(data.updated_at).toLocaleString();
-    resumeStatus.textContent = `Current: ${data.name || '(parsed name unavailable)'} — last updated ${when}`;
+    resumes.forEach((entry) => resumeList.appendChild(renderResumeCard(entry)));
+  }
+
+  async function activate(resumeId) {
+    await fetch(`/api/resumes/${resumeId}/activate`, { method: 'POST' });
+    loadResumes();
+  }
+
+  async function remove(resumeId) {
+    if (!confirm('Delete this resume? This cannot be undone.')) return;
+    const resp = await fetch(`/api/resumes/${resumeId}`, { method: 'DELETE' });
+    const data = await resp.json();
+    if (!resp.ok) {
+      alert(data.error || 'Could not delete this resume.');
+      return;
+    }
+    loadResumes();
   }
 
   uploadBtn.addEventListener('click', async () => {
@@ -48,9 +87,10 @@
 
     const formData = new FormData();
     formData.append('resume', file);
+    formData.append('display_name', document.getElementById('display-name').value);
 
     try {
-      const resp = await fetch('/api/resume/upload', { method: 'POST', body: formData });
+      const resp = await fetch('/api/resumes', { method: 'POST', body: formData });
       const data = await resp.json();
       clearInterval(timer);
       uploadStatus.innerHTML = '';
@@ -60,9 +100,10 @@
         return;
       }
 
-      uploadResult.innerHTML = `<div class="hint">Updated - parsed "${data.name}" with ${data.sections} sections.</div>`;
+      uploadResult.innerHTML = `<div class="hint">Added "${data.display_name}". Mark it active above when you're ready to use it.</div>`;
       fileInput.value = '';
-      loadStatus();
+      document.getElementById('display-name').value = '';
+      loadResumes();
     } catch (e) {
       clearInterval(timer);
       uploadStatus.innerHTML = '';
@@ -72,6 +113,6 @@
     }
   });
 
-  loadStatus();
+  loadResumes();
 </script>
 {% endblock %}

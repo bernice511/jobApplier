@@ -16,10 +16,11 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --text-1: #ffffff; --text-2: #c3c2b7;
-    --text-muted: #898781; --border: rgba(255,255,255,0.10); --gridline: #2c2c2a;
-    --accent: #3987e5; --accent-wash: rgba(57,135,229,0.16);
-    --good: #0ca30c; --warning: #fab219; --critical: #e66767;
+    /* Warm dark palette, matching webapp/templates/base.html.jinja's dark theme. */
+    --page: #191512; --surface: #241d17; --text-1: #f5f1ea; --text-2: #cbc0b0;
+    --text-muted: #9c9082; --border: rgba(255,244,230,0.10); --gridline: #33291f;
+    --accent: #e08a45; --accent-wash: rgba(224,138,69,0.16);
+    --good: #7bb955; --warning: #f0a839; --critical: #e2695a;
   }
 }
 
@@ -109,3 +110,18 @@ button.primary:disabled { opacity: 0.55; }
   background: var(--page); max-height: 320px; overflow-y: auto; font-size: 0.8rem;
 }
 .preview-box mark.changed { background: rgba(237,161,0,0.20); border-bottom: 2px solid #eda100; padding: 0 2px; border-radius: 2px; }
+
+button.secondary {
+  padding: 0.35rem 0.7rem; font-size: 0.78rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-wash); border: none; border-radius: 8px; cursor: pointer;
+}
+button.secondary:disabled { opacity: 0.55; }
+
+.unmatched-question {
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.65rem; margin-bottom: 0.5rem;
+}
+.unmatched-question-text { font-size: 0.82rem; color: var(--text-1); margin-bottom: 0.35rem; }
+.unmatched-answer-input {
+  width: 100%; margin-bottom: 0.4rem; font-family: inherit; font-size: 0.82rem; color: var(--text-1);
+  background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.55rem;
+}

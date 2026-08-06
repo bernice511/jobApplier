@@ -25,22 +25,6 @@
 
   let currentAnalysis = null;
 
-  function startLoading(container, label) {
-    let seconds = 0;
-    const captionId = container.id + '-caption';
-    container.innerHTML = `
-      <div class="loading-box">
-        <div class="spinner-lg"></div>
-        <div id="${captionId}">${label}</div>
-      </div>
-    `;
-    const caption = document.getElementById(captionId);
-    return setInterval(() => {
-      seconds += 1;
-      if (caption) caption.textContent = `${label} ${seconds}s`;
-    }, 1000);
-  }
-
   analyzeBtn.addEventListener('click', async () => {
     const jdText = jdTextEl.value.trim();
     if (!jdText) return;

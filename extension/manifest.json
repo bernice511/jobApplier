@@ -24,7 +24,7 @@
         "*://*.lever.co/*",
         "*://*.myworkdayjobs.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["content.js", "autofill.js"],
       "run_at": "document_idle"
     }
   ],

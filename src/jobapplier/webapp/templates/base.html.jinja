@@ -21,61 +21,99 @@
       --critical:    #d03b3b;
       --highlight:   #eda100;
       --highlight-wash: rgba(237,161,0,0.20);
-      --radius: 12px;
+      --radius: 10px;
+      --sidebar-w: 200px;
+      --sidebar-w-collapsed: 60px;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         color-scheme: dark;
-        --page:        #0d0d0d;
-        --surface:     #1a1a19;
-        --text-1:      #ffffff;
-        --text-2:      #c3c2b7;
-        --text-muted:  #898781;
-        --border:      rgba(255,255,255,0.10);
-        --gridline:    #2c2c2a;
-        --accent:      #3987e5;
-        --accent-wash: rgba(57,135,229,0.16);
-        --good:        #0ca30c;
-        --warning:     #fab219;
-        --critical:    #e66767;
-        --highlight:   #c98500;
-        --highlight-wash: rgba(201,133,0,0.28);
+        /* Warm dark palette: brown-tinted charcoal instead of neutral/cool black,
+           amber accent instead of blue, semantic colors tuned warmer too. */
+        --page:        #191512;
+        --surface:     #241d17;
+        --text-1:      #f5f1ea;
+        --text-2:      #cbc0b0;
+        --text-muted:  #9c9082;
+        --border:      rgba(255,244,230,0.10);
+        --gridline:    #33291f;
+        --accent:      #e08a45;
+        --accent-wash: rgba(224,138,69,0.16);
+        --good:        #7bb955;
+        --warning:     #f0a839;
+        --critical:    #e2695a;
+        --highlight:   #d68b2e;
+        --highlight-wash: rgba(214,139,46,0.24);
       }
     }
 
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       background: var(--page);
       color: var(--text-1);
-      margin: 0;
-      padding: 2.5rem 1.25rem 5rem;
       line-height: 1.45;
     }
-    .app { max-width: 720px; margin: 0 auto; }
 
-    .app-header { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.4rem; }
-    .app-header svg { flex: none; }
-    .app-header h1 { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-    .app-subtitle { color: var(--text-2); font-size: 0.92rem; margin: 0 0 1.1rem; }
+    .shell { display: flex; min-height: 100vh; }
 
-    nav.tabs { display: flex; gap: 0.4rem; margin-bottom: 2.25rem; border-bottom: 1px solid var(--border); }
-    nav.tabs a {
-      text-decoration: none; color: var(--text-muted); font-size: 0.9rem; font-weight: 600;
-      padding: 0.5rem 0.2rem; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    /* --- Sidebar --- */
+    .sidebar {
+      flex: none;
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0.9rem 0.6rem;
+      transition: width 0.15s ease;
     }
-    nav.tabs a.active { color: var(--accent); border-bottom-color: var(--accent); }
+    body.sidebar-collapsed .sidebar { width: var(--sidebar-w-collapsed); padding: 0.9rem 0.4rem; }
+
+    .sidebar-top { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-bottom: 1.1rem; padding: 0 0.3rem; }
+    .brand { display: flex; align-items: center; gap: 0.5rem; overflow: hidden; }
+    .brand svg { flex: none; }
+    .brand-name { font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+    body.sidebar-collapsed .brand-name { display: none; }
+
+    .collapse-btn {
+      flex: none; width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+    }
+    .collapse-btn:hover { background: var(--gridline); color: var(--text-1); }
+    .collapse-btn svg { transition: transform 0.15s ease; }
+    body.sidebar-collapsed .collapse-btn svg { transform: rotate(180deg); }
+
+    .side-nav { display: flex; flex-direction: column; gap: 0.15rem; }
+    .side-nav a {
+      display: flex; align-items: center; gap: 0.65rem;
+      padding: 0.5rem 0.6rem; border-radius: 8px;
+      text-decoration: none; color: var(--text-2); font-size: 0.87rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden;
+    }
+    .side-nav a svg { flex: none; }
+    .side-nav a .label { overflow: hidden; text-overflow: ellipsis; }
+    body.sidebar-collapsed .side-nav a .label { display: none; }
+    body.sidebar-collapsed .side-nav a { justify-content: center; }
+    .side-nav a:hover { background: var(--gridline); color: var(--text-1); }
+    .side-nav a.active { background: var(--accent-wash); color: var(--accent); }
+
+    /* --- Main content --- */
+    .main { flex: 1; min-width: 0; padding: 1.6rem 2rem 3.5rem; max-width: 900px; }
+    .app-subtitle { color: var(--text-2); font-size: 0.88rem; margin: 0 0 1.3rem; }
 
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 1.25rem 1.4rem;
-      margin-bottom: 1.5rem;
+      padding: 1rem 1.15rem;
+      margin-bottom: 1.1rem;
       box-shadow: 0 1px 2px rgba(11,11,11,0.04);
     }
     .card h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.2rem; }
-    .card > p.hint { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 0.9rem; }
+    .card > p.hint { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 0.8rem; }
 
     textarea {
       width: 100%; min-height: 200px; resize: vertical;
@@ -142,7 +180,7 @@
     .result-title { font-weight: 700; font-size: 1.05rem; }
     .result-sub { color: var(--text-muted); font-size: 0.85rem; }
 
-    .stat-row { display: flex; align-items: center; gap: 1rem; margin: 1rem 0; }
+    .stat-row { display: flex; align-items: center; gap: 1rem; margin: 0.8rem 0; }
     .stat-tile { flex: none; }
     .stat-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
     .stat-value { font-size: 1.7rem; font-weight: 700; line-height: 1; }
@@ -159,7 +197,15 @@
     }
     .pill-link:hover { filter: brightness(0.97); }
 
-    .changes-title { font-size: 0.85rem; font-weight: 600; margin: 1.1rem 0 0.4rem; color: var(--text-2); }
+    button.secondary {
+      padding: 0.4rem 0.85rem; font-size: 0.85rem; font-weight: 600;
+      color: var(--text-2); background: var(--gridline); border: none; border-radius: 999px;
+      cursor: pointer; transition: filter 0.15s;
+    }
+    button.secondary:hover { filter: brightness(0.94); }
+    body.sidebar-collapsed .side-nav a.active { position: relative; }
+
+    .changes-title { font-size: 0.85rem; font-weight: 600; margin: 0.9rem 0 0.4rem; color: var(--text-2); }
     .changes-list { list-style: none; margin: 0; padding: 0; }
     .changes-list li { position: relative; padding-left: 1.1rem; margin-bottom: 0.4rem; font-size: 0.87rem; color: var(--text-2); }
     .changes-list li::before {
@@ -199,35 +245,70 @@
       outline: none; transition: border-color 0.15s;
     }
     .chat-input-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
-    button.secondary {
-      padding: 0.55rem 1.1rem; font-size: 0.88rem; font-weight: 600;
-      color: var(--accent); background: var(--accent-wash); border: none; border-radius: 999px;
-      cursor: pointer; transition: filter 0.15s;
+
+    /* Pagination (used on /alerts) */
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 0.3rem; margin-top: 1rem; }
+    .pagination button {
+      min-width: 30px; height: 30px; padding: 0 0.5rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--surface); color: var(--text-2);
+      font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: filter 0.15s;
     }
-    button.secondary:hover { filter: brightness(0.97); }
+    .pagination button:hover:not(:disabled) { filter: brightness(0.95); }
+    .pagination button:disabled { opacity: 0.4; cursor: default; }
+    .pagination button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="app-header">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="2" width="18" height="20" rx="3" fill="#2a78d6"/>
-        <path d="M7 7h10M7 11h10M7 15h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
-      <h1>jobApplier</h1>
-    </div>
-    <p class="app-subtitle">Paste a job description, get a tailored resume + cover letter, and look up what you used later.</p>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="2" width="18" height="20" rx="3" fill="var(--accent)"/>
+            <path d="M7 7h10M7 11h10M7 15h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span class="brand-name">jobApplier</span>
+        </div>
+        <button class="collapse-btn" id="collapse-btn" title="Collapse sidebar" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+      </div>
 
-    <nav class="tabs">
-      <a href="/" class="{{ 'active' if active_page == 'tailor' else '' }}">Tailor</a>
-      <a href="/search" class="{{ 'active' if active_page == 'search' else '' }}">Search past applications</a>
-      <a href="/resume" class="{{ 'active' if active_page == 'resume' else '' }}">Resume</a>
-    </nav>
+      <nav class="side-nav">
+        <a href="/alerts" class="{{ 'active' if active_page == 'alerts' else '' }}" title="Job Alerts">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+          <span class="label">Job Alerts</span>
+        </a>
+        <a href="/search" class="{{ 'active' if active_page == 'search' else '' }}" title="Applications">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <span class="label">Applications</span>
+        </a>
+        <a href="/resume" class="{{ 'active' if active_page == 'resume' else '' }}" title="Resume">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M9.5 13h5M9.5 16.5h5"/></svg>
+          <span class="label">Resume</span>
+        </a>
+        <a href="/" class="{{ 'active' if active_page == 'tailor' else '' }}" title="Tailor">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+          <span class="label">Tailor</span>
+        </a>
+      </nav>
+    </aside>
 
-    {% block content %}{% endblock %}
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
   </div>
 
   <script>
+    const SIDEBAR_KEY = 'jobapplier.sidebarCollapsed';
+    if (localStorage.getItem(SIDEBAR_KEY) === '1') document.body.classList.add('sidebar-collapsed');
+    document.getElementById('collapse-btn').addEventListener('click', () => {
+      const collapsed = document.body.classList.toggle('sidebar-collapsed');
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+    });
+
     function scoreColor(score) {
       if (score >= 8) return 'var(--good)';
       if (score >= 5) return 'var(--warning)';
@@ -268,6 +349,23 @@
         </div>
       `;
       return div;
+    }
+
+    // Shared by tailor.html.jinja and resume.html.jinja for a running "Xs" progress caption.
+    function startLoading(container, label) {
+      let seconds = 0;
+      const captionId = container.id + '-caption';
+      container.innerHTML = `
+        <div class="loading-box">
+          <div class="spinner-lg"></div>
+          <div id="${captionId}">${label}</div>
+        </div>
+      `;
+      const caption = document.getElementById(captionId);
+      return setInterval(() => {
+        seconds += 1;
+        if (caption) caption.textContent = `${label} ${seconds}s`;
+      }, 1000);
     }
   </script>
   {% block scripts %}{% endblock %}

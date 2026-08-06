@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from typing import Literal
 
-from jobapplier.common import resume_parser
+from jobapplier.common import resume_parser, resume_store
 from jobapplier.common.claude_cli import call_claude_json
 from jobapplier.common.config import GENERATED_DIR
 from jobapplier.common.resume_template import render_cover_letter, render_resume
@@ -329,7 +329,7 @@ def analyze_jd(jd_text: str) -> dict:
     resume (including a spurious re-extraction from content.js re-publishing an unchanged job,
     see panel.js's isNewJob guard) returns instantly instead of re-running the pipeline."""
     jd_text = _clean_jd_text(jd_text)
-    master_resume = resume_parser.parse_and_cache()
+    master_resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
 
     cached = analyze_cache.get(jd_text, master_resume)
     if cached is not None:
@@ -463,7 +463,8 @@ def tailor_from_jd(
     approved_keywords = approved_keywords or []
     want_resume = generate in ("both", "resume")
     want_cover = generate in ("both", "cover_letter")
-    master_resume = resume_parser.parse_and_cache()
+    active_paths = resume_store.get_active_paths()
+    master_resume = resume_parser.parse_and_cache(**active_paths)
 
     resume_result = None
     cover_result = None
@@ -507,7 +508,10 @@ def tailor_from_jd(
 
     if resume_result:
         resume_pdf = GENERATED_DIR / f"{slug}_resume.pdf"
-        render_resume(resume_result["resume"], resume_pdf)
+        render_resume(
+            resume_result["resume"], resume_pdf,
+            style_json_path=active_paths["style_json_path"], photo_path=active_paths["photo_path"],
+        )
         record["resume_path"] = str(resume_pdf)
 
         highlighted_resume = resume_diff.diff_resume(master_resume, resume_result["resume"])
@@ -516,7 +520,10 @@ def tailor_from_jd(
 
     if cover_result:
         cover_letter_pdf = GENERATED_DIR / f"{slug}_cover_letter.pdf"
-        render_cover_letter(cover_result["cover_letter"], cover_letter_pdf)
+        render_cover_letter(
+            cover_result["cover_letter"], cover_letter_pdf,
+            style_json_path=active_paths["style_json_path"], photo_path=active_paths["photo_path"],
+        )
         record["cover_letter_path"] = str(cover_letter_pdf)
 
     tailoring_log.append_record(record)

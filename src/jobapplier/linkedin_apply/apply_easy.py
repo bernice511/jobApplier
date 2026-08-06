@@ -11,10 +11,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
 from playwright.sync_api import Page
 
-from jobapplier.common.config import SCREENING_ANSWERS_PATH
+from jobapplier.common.screening_answers import load_screening_answers, save_screening_answers
 
 SELECTORS = {
     "easy_apply_button": "button:has-text('Easy Apply')",
@@ -46,19 +45,6 @@ QUESTION_KEY_HINTS = [
     ("portfolio", "website_url"),
     ("website", "website_url"),
 ]
-
-
-def load_screening_answers() -> dict:
-    if not SCREENING_ANSWERS_PATH.exists():
-        return {"patterns": {}}
-    data = yaml.safe_load(SCREENING_ANSWERS_PATH.read_text()) or {}
-    data.setdefault("patterns", {})
-    return data
-
-
-def save_screening_answers(data: dict) -> None:
-    SCREENING_ANSWERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SCREENING_ANSWERS_PATH.write_text(yaml.dump(data, sort_keys=False))
 
 
 def _match_answer(question_text: str, answers: dict) -> str | None:

@@ -13,6 +13,7 @@ const generateResult = document.getElementById("generate-result");
 
 let currentJob = null;
 let currentAnalysis = null;
+let currentGenerateResult = null;
 
 function scoreColor(score) {
   if (score >= 8) return "var(--good)";
@@ -234,9 +235,17 @@ async function onGenerate() {
         <div class="preview-box">${data.resume_preview_html}</div>
       `;
     }
+    html += `
+      <button class="primary" id="autofill-btn">Autofill this application</button>
+      <p class="preview-note">Fills in what it can match on the open tab - never clicks Submit/Apply, never checks agreement/consent boxes. Review before you submit.</p>
+      <div id="autofill-status"></div>
+      <div id="autofill-result"></div>
+    `;
     html += `</div>`;
 
+    currentGenerateResult = data;
     generateResult.innerHTML = html;
+    document.getElementById("autofill-btn").addEventListener("click", onAutofill);
   } catch (e) {
     clearInterval(timer);
     generateStatus.innerHTML = "";
@@ -244,6 +253,147 @@ async function onGenerate() {
   } finally {
     generateBtn.disabled = false;
   }
+}
+
+async function fetchFileAsArrayBuffer(filename) {
+  const resp = await fetch(`${BACKEND_URL}/files/${encodeURIComponent(filename)}`);
+  if (!resp.ok) throw new Error(`Could not fetch ${filename}`);
+  return resp.arrayBuffer();
+}
+
+function getActiveTab() {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!tabs || !tabs[0]) {
+        reject(new Error("No active tab found."));
+        return;
+      }
+      resolve(tabs[0]);
+    });
+  });
+}
+
+function sendAutofillMessage(tabId, profile, files) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { type: "JOBAPPLIER_AUTOFILL", profile, files }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+async function onAutofill() {
+  const autofillBtn = document.getElementById("autofill-btn");
+  const autofillStatus = document.getElementById("autofill-status");
+  const autofillResultEl = document.getElementById("autofill-result");
+  autofillResultEl.innerHTML = "";
+  autofillBtn.disabled = true;
+  const timer = startLoading(autofillStatus, "Filling in the form...");
+
+  try {
+    const profileResp = await fetch(`${BACKEND_URL}/api/autofill-profile`);
+    const profile = await profileResp.json();
+    if (!profileResp.ok) {
+      throw new Error(profile.error || "Could not load your profile data.");
+    }
+
+    const files = [];
+    if (currentGenerateResult.resume_filename) {
+      files.push({
+        filename: currentGenerateResult.resume_filename,
+        mimeType: "application/pdf",
+        bytes: await fetchFileAsArrayBuffer(currentGenerateResult.resume_filename),
+      });
+    }
+    if (currentGenerateResult.cover_letter_filename) {
+      files.push({
+        filename: currentGenerateResult.cover_letter_filename,
+        mimeType: "application/pdf",
+        bytes: await fetchFileAsArrayBuffer(currentGenerateResult.cover_letter_filename),
+      });
+    }
+
+    const tab = await getActiveTab();
+    let response;
+    try {
+      response = await sendAutofillMessage(tab.id, profile, files);
+    } catch (err) {
+      throw new Error(
+        "Couldn't find the application form on this tab - open the actual application page (not just the job listing) and try again."
+      );
+    }
+
+    clearInterval(timer);
+    autofillStatus.innerHTML = "";
+    renderAutofillResult(response || {});
+  } catch (e) {
+    clearInterval(timer);
+    autofillStatus.innerHTML = "";
+    autofillResultEl.innerHTML = `<div class="error-box">${e.message || e}</div>`;
+  } finally {
+    autofillBtn.disabled = false;
+  }
+}
+
+function renderAutofillResult(result) {
+  const autofillResultEl = document.getElementById("autofill-result");
+  const filledCount = result.filledCount || 0;
+  const filledLabels = result.filledLabels || [];
+  const unmatched = result.unmatchedQuestions || [];
+
+  let html = `<div class="changes-title">Filled ${filledCount} field${filledCount === 1 ? "" : "s"}</div>`;
+  if (filledLabels.length) {
+    html += `<ul class="changes-list">${filledLabels.map((l) => `<li>${l}</li>`).join("")}</ul>`;
+  }
+
+  if (result.fileUploadStatus) {
+    html += `<div class="changes-title">Resume/cover letter upload</div><p class="preview-note">${result.fileUploadStatus}</p>`;
+  }
+
+  if (unmatched.length) {
+    html += `<div class="changes-title">Couldn't match ${unmatched.length} question${unmatched.length === 1 ? "" : "s"} - answer on the page, then save it here so it's never asked again</div>`;
+    unmatched.forEach((question, i) => {
+      html += `
+        <div class="unmatched-question">
+          <div class="unmatched-question-text">${question}</div>
+          <input type="text" class="unmatched-answer-input" data-index="${i}" placeholder="Your answer">
+          <button class="secondary save-answer-btn" data-index="${i}">Save answer</button>
+        </div>
+      `;
+    });
+  }
+
+  autofillResultEl.innerHTML = html;
+
+  unmatched.forEach((question, i) => {
+    const btn = autofillResultEl.querySelector(`.save-answer-btn[data-index="${i}"]`);
+    const input = autofillResultEl.querySelector(`.unmatched-answer-input[data-index="${i}"]`);
+    if (!btn || !input) return;
+    btn.addEventListener("click", async () => {
+      const answer = input.value.trim();
+      if (!answer) return;
+      btn.disabled = true;
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/screening-answers/patterns`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, answer }),
+        });
+        if (!resp.ok) throw new Error("Save failed");
+        btn.textContent = "Saved - click Autofill again to apply it";
+      } catch {
+        btn.disabled = false;
+        btn.textContent = "Save answer (failed, retry)";
+      }
+    });
+  });
 }
 
 checkBackend();

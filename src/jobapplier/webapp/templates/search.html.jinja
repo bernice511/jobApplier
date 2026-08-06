@@ -2,50 +2,124 @@
 
 {% block content %}
 <div class="card">
-  <h2>Ask about past applications</h2>
-  <p class="hint">e.g. "which resume did I use for Netflix" or "backend role at Google"</p>
-  <div id="chat-log"></div>
-  <div class="chat-input-row">
-    <input id="chat-input" type="text" placeholder="Type a question..." autofocus>
-    <button class="secondary" id="chat-btn">Ask</button>
-  </div>
+  <h2>Applications</h2>
+  <p class="hint">Every resume/cover letter you've generated from a pasted JD - track which
+    ones you actually applied to.</p>
+  <input id="filter-input" type="text" placeholder="Filter by company, title, or location..."
+    style="width:100%; margin-bottom:0.9rem; padding:0.6rem 0.9rem; font-size:0.9rem; color:var(--text-1); background:var(--page); border:1px solid var(--border); border-radius:999px; outline:none;">
+  <div id="app-list"></div>
+  <div id="app-empty" class="hint" style="display:none;">No applications match.</div>
+  <div id="app-pagination" class="pagination"></div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  const chatLog = document.getElementById('chat-log');
-  const chatInput = document.getElementById('chat-input');
+  const PAGE_SIZE = 10;
+  const filterInput = document.getElementById('filter-input');
+  const appList = document.getElementById('app-list');
+  const appEmpty = document.getElementById('app-empty');
+  const appPagination = document.getElementById('app-pagination');
+  let allApplications = [];
+  let filteredApplications = [];
+  let currentPage = 1;
 
-  document.getElementById('chat-btn').addEventListener('click', askQuestion);
-  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') askQuestion(); });
+  function renderApplicationCard(record) {
+    const div = document.createElement('div');
+    div.className = 'result-card';
+    div.style.marginBottom = '0.8rem';
+    let downloads = '';
+    if (record.resume_filename) downloads += fileLink(record.resume_filename, 'Resume');
+    if (record.cover_letter_filename) downloads += fileLink(record.cover_letter_filename, 'Cover letter');
 
-  async function askQuestion() {
-    const question = chatInput.value.trim();
-    if (!question) return;
+    div.innerHTML = `
+      <div class="meta">${record.title} @ ${record.company}${record.location ? ' - ' + record.location : ''}</div>
+      <div class="sub">${record.timestamp || ''}</div>
+      ${statTileHtml(record.match_score)}
+      <div class="downloads">${downloads}</div>
+      <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.85rem; color:var(--text-2); cursor:pointer;">
+        <input type="checkbox" class="applied-checkbox" ${record.applied ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;">
+        <span class="applied-label">${record.applied ? 'Applied on ' + record.date_applied : 'Mark as applied'}</span>
+      </label>
+    `;
+    div.querySelector('.applied-checkbox').addEventListener('change', (e) => markApplied(record, e.target));
+    return div;
+  }
 
-    const q = document.createElement('div');
-    q.className = 'bubble-user';
-    q.textContent = question;
-    chatLog.appendChild(q);
-    chatInput.value = '';
-
-    const resp = await fetch('/api/query', {
+  async function markApplied(record, checkbox) {
+    const applied = checkbox.checked;
+    const resp = await fetch('/api/applications/mark_applied', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ record_key: record.record_key, applied }),
     });
-    const data = await resp.json();
-
-    if (!data.matches || data.matches.length === 0) {
-      const none = document.createElement('div');
-      none.className = 'bubble-empty';
-      none.textContent = 'No matching applications found.';
-      chatLog.appendChild(none);
-    } else {
-      data.matches.forEach((r) => chatLog.appendChild(renderResultCard(r)));
+    if (!resp.ok) {
+      checkbox.checked = !applied;
+      return;
     }
-    chatLog.scrollTop = chatLog.scrollHeight;
+    record.applied = applied;
+    record.date_applied = applied ? new Date().toISOString().slice(0, 10) : '';
+    checkbox.closest('label').querySelector('.applied-label').textContent =
+      applied ? `Applied on ${record.date_applied}` : 'Mark as applied';
   }
+
+  function matchesFilter(record, tokens) {
+    if (!tokens.length) return true;
+    const haystack = `${record.company} ${record.title} ${record.location || ''}`.toLowerCase();
+    return tokens.every((t) => haystack.includes(t));
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(filteredApplications.length / PAGE_SIZE);
+    appPagination.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    const addBtn = (label, page, opts = {}) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      if (opts.active) btn.classList.add('active');
+      if (opts.disabled) btn.disabled = true;
+      btn.addEventListener('click', () => { currentPage = page; renderPage(); });
+      appPagination.appendChild(btn);
+    };
+
+    addBtn('‹', currentPage - 1, { disabled: currentPage === 1 });
+    for (let page = 1; page <= totalPages; page++) {
+      addBtn(String(page), page, { active: page === currentPage });
+    }
+    addBtn('›', currentPage + 1, { disabled: currentPage === totalPages });
+  }
+
+  function renderPage() {
+    appList.innerHTML = '';
+    if (!filteredApplications.length) {
+      appEmpty.style.display = '';
+      appPagination.innerHTML = '';
+      return;
+    }
+    appEmpty.style.display = 'none';
+    const start = (currentPage - 1) * PAGE_SIZE;
+    filteredApplications.slice(start, start + PAGE_SIZE).forEach((record) => appList.appendChild(renderApplicationCard(record)));
+    renderPagination();
+  }
+
+  function renderList() {
+    const query = filterInput.value.trim().toLowerCase();
+    const tokens = query.split(/\s+/).filter((t) => t.length >= 2);
+    filteredApplications = allApplications.filter((r) => matchesFilter(r, tokens));
+    currentPage = 1;
+    renderPage();
+  }
+
+  filterInput.addEventListener('input', renderList);
+
+  async function loadApplications() {
+    const resp = await fetch('/api/applications');
+    const data = await resp.json();
+    allApplications = data.applications || [];
+    renderList();
+  }
+
+  loadApplications();
 </script>
 {% endblock %}

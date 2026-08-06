@@ -1,0 +1,110 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<div class="card">
+  <h2>Job alerts</h2>
+  <p class="hint">New listings found by the background job-alert pipeline that score well
+    against your resume. Refreshed automatically a few times a day.</p>
+  <div id="alerts-list"></div>
+  <div id="alerts-empty" class="hint" style="display:none;">No new matches right now - check back later.</div>
+  <div id="alerts-pagination" class="pagination"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PAGE_SIZE = 10;
+  const alertsList = document.getElementById('alerts-list');
+  const alertsEmpty = document.getElementById('alerts-empty');
+  const alertsPagination = document.getElementById('alerts-pagination');
+  let allAlerts = [];
+  let currentPage = 1;
+
+  function keywordChips(matched, suggested) {
+    let html = '';
+    (matched || []).forEach((term) => {
+      html += `<span class="chip">${term}</span>`;
+    });
+    (suggested || []).forEach((kw) => {
+      const title = (kw.based_on || '').replace(/"/g, '&quot;');
+      html += `<span class="chip" title="${title}">${kw.term} (possible)</span>`;
+    });
+    return html ? `<div class="chip-row">${html}</div>` : '';
+  }
+
+  function renderAlertCard(job) {
+    const div = document.createElement('div');
+    div.className = 'result-card';
+    div.style.marginBottom = '0.8rem';
+    div.innerHTML = `
+      <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
+      <div class="sub">Found ${job.found_date || ''}</div>
+      ${statTileHtml(job.match_score)}
+      ${keywordChips(job.matched_keywords, job.suggested_keywords)}
+      <div class="downloads">
+        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
+        <button class="secondary dismiss-btn" data-job-id="${job.job_id}">Dismiss</button>
+      </div>
+    `;
+    div.querySelector('.dismiss-btn').addEventListener('click', () => dismiss(job.job_id));
+    return div;
+  }
+
+  async function dismiss(jobId) {
+    const resp = await fetch('/api/alerts/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId }),
+    });
+    if (!resp.ok) return;
+    allAlerts = allAlerts.filter((job) => job.job_id !== jobId);
+    const maxPage = Math.max(1, Math.ceil(allAlerts.length / PAGE_SIZE));
+    if (currentPage > maxPage) currentPage = maxPage;
+    renderPage();
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(allAlerts.length / PAGE_SIZE);
+    alertsPagination.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    const addBtn = (label, page, opts = {}) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      if (opts.active) btn.classList.add('active');
+      if (opts.disabled) btn.disabled = true;
+      btn.addEventListener('click', () => { currentPage = page; renderPage(); });
+      alertsPagination.appendChild(btn);
+    };
+
+    addBtn('‹', currentPage - 1, { disabled: currentPage === 1 });
+    for (let page = 1; page <= totalPages; page++) {
+      addBtn(String(page), page, { active: page === currentPage });
+    }
+    addBtn('›', currentPage + 1, { disabled: currentPage === totalPages });
+  }
+
+  function renderPage() {
+    alertsList.innerHTML = '';
+    if (!allAlerts.length) {
+      alertsEmpty.style.display = '';
+      alertsPagination.innerHTML = '';
+      return;
+    }
+    alertsEmpty.style.display = 'none';
+    const start = (currentPage - 1) * PAGE_SIZE;
+    allAlerts.slice(start, start + PAGE_SIZE).forEach((job) => alertsList.appendChild(renderAlertCard(job)));
+    renderPagination();
+  }
+
+  async function loadAlerts() {
+    const resp = await fetch('/api/alerts');
+    const data = await resp.json();
+    allAlerts = data.alerts || [];
+    currentPage = 1;
+    renderPage();
+  }
+
+  loadAlerts();
+</script>
+{% endblock %}
