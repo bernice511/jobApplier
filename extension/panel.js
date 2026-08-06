@@ -11,7 +11,9 @@ const analyzeStatus = document.getElementById("analyze-status");
 const analyzeResult = document.getElementById("analyze-result");
 const generateResult = document.getElementById("generate-result");
 const autofillBtn = document.getElementById("autofill-btn");
-const profileDetails = document.getElementById("profile-details");
+const profileDialog = document.getElementById("profile-dialog");
+const profileOpenBtn = document.getElementById("profile-open-btn");
+const profileCloseBtn = document.getElementById("profile-close-btn");
 const profileSaveBtn = document.getElementById("profile-save-btn");
 
 const PROFILE_FIELDS = [
@@ -457,8 +459,17 @@ async function loadProfileFields() {
   }
 }
 
-profileDetails.addEventListener("toggle", () => {
-  if (profileDetails.open && !profileLoaded) loadProfileFields();
+profileOpenBtn.addEventListener("click", () => {
+  profileDialog.showModal();
+  if (!profileLoaded) loadProfileFields();
+});
+
+profileCloseBtn.addEventListener("click", () => profileDialog.close());
+
+// Click on the backdrop (the dialog element itself, not any of its children) closes it too -
+// <dialog> only closes via .close()/Escape by default, not a backdrop click.
+profileDialog.addEventListener("click", (e) => {
+  if (e.target === profileDialog) profileDialog.close();
 });
 
 profileSaveBtn.addEventListener("click", async () => {
