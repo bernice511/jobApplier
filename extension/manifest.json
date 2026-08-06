@@ -2,10 +2,14 @@
   "manifest_version": 3,
   "name": "jobApplier Assistant",
   "version": "0.1.0",
-  "description": "Reads the LinkedIn job you're viewing and tailors your resume/cover letter via your local jobApplier backend.",
+  "description": "Reads the job you're viewing (LinkedIn, Indeed, Greenhouse, Lever, or Workday) and tailors your resume/cover letter via your local jobApplier backend.",
   "permissions": ["storage", "sidePanel"],
   "host_permissions": [
     "*://*.linkedin.com/*",
+    "*://*.indeed.com/*",
+    "*://*.greenhouse.io/*",
+    "*://*.lever.co/*",
+    "*://*.myworkdayjobs.com/*",
     "http://127.0.0.1:5050/*"
   ],
   "background": {
@@ -13,7 +17,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.linkedin.com/jobs/*"],
+      "matches": [
+        "*://*.linkedin.com/jobs/*",
+        "*://*.indeed.com/*",
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.myworkdayjobs.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

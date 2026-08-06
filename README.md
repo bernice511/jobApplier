@@ -168,25 +168,33 @@ above, since these aren't necessarily submitted LinkedIn applications.
 
 ## Browser extension (optional)
 
-`extension/` is a Manifest V3 Chrome extension that reads the LinkedIn job you're currently
-viewing (in your regular, everyday Chrome - not the dedicated automation profile above, so no
-separate LinkedIn login needed) and lets you tailor a resume/cover letter for it from a side
-panel, without copy-pasting the JD. It talks to the local web UI's Flask server
-(`jobapplier.webapp.app`) - it does **not** auto-fill or submit LinkedIn's Easy Apply form;
-that stays in the semi-automated `linkedin_apply/main.py` flow above by design (see "Why
+`extension/` is a Manifest V3 Chrome extension that reads the job you're currently viewing (in
+your regular, everyday Chrome - not the dedicated automation profile above, so no separate
+LinkedIn login needed) and lets you tailor a resume/cover letter for it from a side panel,
+without copy-pasting the JD. It talks to the local web UI's Flask server
+(`jobapplier.webapp.app`) - it does **not** auto-fill or submit an application form; that
+stays in the semi-automated `linkedin_apply/main.py` flow above by design (see "Why
 semi-automatic?").
+
+Supported sites: LinkedIn, Indeed, Greenhouse, Lever, and Workday. Each has its own extractor
+in `extension/content.js` (`SITE_EXTRACTORS`); anything a site-specific extractor misses (or
+any other site entirely) falls back to a generic heuristic (`extractGeneric()`) rather than
+coming back empty. Company/title/location mis-detection isn't fatal even then - the backend's
+`analyze_jd()` re-derives all three from the pasted JD text anyway, so extraction accuracy
+matters most for the description text, not those fields.
 
 Setup:
 1. Start the backend it depends on: `DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.webapp.app`
 2. In Chrome, go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
    and select the `extension/` folder.
-3. Click the extension's toolbar icon to open its side panel, then open any LinkedIn job
-   posting - it detects the title/company/location/description automatically (with a
+3. Click the extension's toolbar icon to open its side panel, then open any job posting on a
+   supported site - it detects the title/company/location/description automatically (with a
    collapsible box to review/edit the description if extraction misses something).
 
-Like `linkedin_apply/linkedin_search.py`/`linkedin_apply/apply_easy.py`, the DOM selectors it
-scrapes (`extension/content.js`, grouped as `SELECTORS` at the top) will need updating if
-LinkedIn's markup changes.
+Like `linkedin_apply/linkedin_search.py`/`linkedin_apply/apply_easy.py`, the DOM selectors
+each site's extractor uses in `extension/content.js` will need updating if that site's markup
+changes - the Indeed/Greenhouse/Lever/Workday ones in particular are based on each platform's
+typical markup, not confirmed against a live page of each, so expect to iterate on them.
 
 ## Project structure
 
