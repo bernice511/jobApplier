@@ -26,21 +26,22 @@
 
   function renderApplicationCard(record) {
     const div = document.createElement('div');
-    div.className = 'result-card';
-    div.style.marginBottom = '0.8rem';
+    div.className = 'job-card';
     let downloads = '';
     if (record.resume_filename) downloads += fileLink(record.resume_filename, 'Resume');
     if (record.cover_letter_filename) downloads += fileLink(record.cover_letter_filename, 'Cover letter');
 
     div.innerHTML = `
-      <div class="meta">${record.title} @ ${record.company}${record.location ? ' - ' + record.location : ''}</div>
-      <div class="sub">${record.timestamp || ''}</div>
-      ${statTileHtml(record.match_score)}
-      <div class="downloads">${downloads}</div>
-      <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.85rem; color:var(--text-2); cursor:pointer;">
-        <input type="checkbox" class="applied-checkbox" ${record.applied ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;">
-        <span class="applied-label">${record.applied ? 'Applied on ' + record.date_applied : 'Mark as applied'}</span>
-      </label>
+      <div class="job-card-main">
+        <div class="meta">${record.title} @ ${record.company}${record.location ? ' - ' + record.location : ''}</div>
+        <div class="sub">${record.timestamp || ''}</div>
+        <div class="downloads">${downloads}</div>
+        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.85rem; color:var(--text-2); cursor:pointer;">
+          <input type="checkbox" class="applied-checkbox" ${record.applied ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;">
+          <span class="applied-label">${record.applied ? 'Applied on ' + record.date_applied : 'Mark as applied'}</span>
+        </label>
+      </div>
+      ${matchScorePanelHtml(record.match_score)}
     `;
     div.querySelector('.applied-checkbox').addEventListener('change', (e) => markApplied(record, e.target));
     return div;

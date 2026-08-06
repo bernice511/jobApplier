@@ -255,6 +255,30 @@
     .pagination button:hover:not(:disabled) { filter: brightness(0.95); }
     .pagination button:disabled { opacity: 0.4; cursor: default; }
     .pagination button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Job-list cards (alerts, applications) - the match score is an integrated dark panel
+       spanning the full card height on the right, not a thin bar floating in empty space. */
+    .job-card {
+      display: flex; align-items: stretch;
+      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+      margin-bottom: 0.8rem; background: var(--surface);
+    }
+    .job-card-main { flex: 1; min-width: 0; padding: 0.9rem 1.1rem; }
+    .job-card-main .meta { font-weight: 600; font-size: 0.92rem; }
+    .job-card-main .sub { color: var(--text-muted); font-size: 0.8rem; margin: 1px 0 0.5rem; }
+    .job-card-main .downloads { margin-top: 0.6rem; }
+    .job-card-score {
+      flex: none; width: 128px; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 0.45rem; padding: 0.9rem 0.7rem; text-align: center;
+      background: linear-gradient(160deg, #0f2422, #0a1716); color: #eaf4f3;
+    }
+    .job-card-score-ring {
+      width: 62px; height: 62px; border-radius: 50%; border: 3px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .job-card-score-value { font-size: 1.15rem; font-weight: 700; line-height: 1; }
+    .job-card-score-value .job-card-score-sub { font-size: 0.68rem; font-weight: 500; opacity: 0.7; }
+    .job-card-score-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -333,6 +357,27 @@
             <div class="stat-value">${score}<span class="stat-value-sub">/10</span></div>
           </div>
           <div class="meter-track"><div class="meter-fill" style="width:${pct}%; background:${color};"></div></div>
+        </div>
+      `;
+    }
+
+    function matchLabel(score) {
+      if (score >= 8) return 'STRONG MATCH';
+      if (score >= 5) return 'GOOD MATCH';
+      return 'WEAK MATCH';
+    }
+
+    // Used by job-list cards (alerts, applications) instead of statTileHtml() - a self-
+    // contained dark panel meant to sit alongside a card's main content, not a bar inside it.
+    function matchScorePanelHtml(score) {
+      if (score === undefined || score === null || score === '') return '';
+      const color = scoreColor(score);
+      return `
+        <div class="job-card-score">
+          <div class="job-card-score-ring" style="border-color:${color};">
+            <div class="job-card-score-value">${score}<span class="job-card-score-sub">/10</span></div>
+          </div>
+          <div class="job-card-score-label" style="color:${color};">${matchLabel(score)}</div>
         </div>
       `;
     }

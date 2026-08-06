@@ -71,12 +71,18 @@ button.primary:disabled { opacity: 0.55; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.stat-row { display: flex; align-items: center; gap: 0.7rem; margin: 0.7rem 0; }
-.stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; }
-.stat-value { font-size: 1.3rem; font-weight: 700; }
-.stat-value-sub { font-size: 0.85rem; font-weight: 500; color: var(--text-muted); }
-.meter-track { flex: 1; height: 7px; border-radius: 4px; background: var(--gridline); overflow: hidden; }
-.meter-fill { height: 100%; border-radius: 4px; }
+.job-card-score {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.35rem; padding: 0.8rem; margin: 0.6rem 0; border-radius: 10px; text-align: center;
+  background: linear-gradient(160deg, #0f2422, #0a1716); color: #eaf4f3;
+}
+.job-card-score-ring {
+  width: 54px; height: 54px; border-radius: 50%; border: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.job-card-score-value { font-size: 1rem; font-weight: 700; line-height: 1; }
+.job-card-score-value .job-card-score-sub { font-size: 0.62rem; font-weight: 500; opacity: 0.7; }
+.job-card-score-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.3rem 0 0.6rem; }
 .chip { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--gridline); color: var(--text-2); }

@@ -34,17 +34,18 @@
 
   function renderAlertCard(job) {
     const div = document.createElement('div');
-    div.className = 'result-card';
-    div.style.marginBottom = '0.8rem';
+    div.className = 'job-card';
     div.innerHTML = `
-      <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
-      <div class="sub">Found ${job.found_date || ''}</div>
-      ${statTileHtml(job.match_score)}
-      ${keywordChips(job.matched_keywords, job.suggested_keywords)}
-      <div class="downloads">
-        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
-        <button class="secondary dismiss-btn" data-job-id="${job.job_id}">Dismiss</button>
+      <div class="job-card-main">
+        <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
+        <div class="sub">Found ${job.found_date || ''}</div>
+        ${keywordChips(job.matched_keywords, job.suggested_keywords)}
+        <div class="downloads">
+          <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
+          <button class="secondary dismiss-btn" data-job-id="${job.job_id}">Dismiss</button>
+        </div>
       </div>
+      ${matchScorePanelHtml(job.match_score)}
     `;
     div.querySelector('.dismiss-btn').addEventListener('click', () => dismiss(job.job_id));
     return div;

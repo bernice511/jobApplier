@@ -36,17 +36,21 @@ function fileLink(filename, label) {
   return `<a class="pill-link" href="${BACKEND_URL}/files/${encodeURIComponent(filename)}" target="_blank">${label}</a>`;
 }
 
+function matchLabel(score) {
+  if (score >= 8) return "STRONG MATCH";
+  if (score >= 5) return "GOOD MATCH";
+  return "WEAK MATCH";
+}
+
 function statTileHtml(score) {
   if (score === undefined || score === null || score === "") return "";
   const color = scoreColor(score);
-  const pct = Math.max(0, Math.min(10, score)) * 10;
   return `
-    <div class="stat-row">
-      <div>
-        <div class="stat-label">Match score</div>
-        <div class="stat-value">${score}<span class="stat-value-sub">/10</span></div>
+    <div class="job-card-score">
+      <div class="job-card-score-ring" style="border-color:${color};">
+        <div class="job-card-score-value">${score}<span class="job-card-score-sub">/10</span></div>
       </div>
-      <div class="meter-track"><div class="meter-fill" style="width:${pct}%; background:${color};"></div></div>
+      <div class="job-card-score-label" style="color:${color};">${matchLabel(score)}</div>
     </div>
   `;
 }
