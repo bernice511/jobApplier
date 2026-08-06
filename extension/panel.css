@@ -7,10 +7,15 @@
   --text-muted:  #898781;
   --border:      rgba(11,11,11,0.10);
   --gridline:    #e1e0d9;
-  --accent:      #2a78d6;
-  --accent-wash: rgba(42,120,214,0.10);
+  /* Same teal hue family as the dark accent below, just a darker/more saturated step for
+     the light surface - see base.html.jinja for the OKLCH/contrast numbers behind this. */
+  --accent:      #037568;
+  --accent-wash: rgba(3,117,104,0.10);
+  --button-ink:  #ffffff;
+  /* Status colors are fixed/theme-invariant - same hex in light and dark. */
   --good:        #0ca30c;
-  --warning:     #c98500;
+  --warning:     #fab219;
+  --serious:     #ec835a;
   --critical:    #d03b3b;
 }
 @media (prefers-color-scheme: dark) {
@@ -20,7 +25,10 @@
     --page: #0c1618; --surface: #142226; --text-1: #eaf4f3; --text-2: #b7cbc9;
     --text-muted: #7e9997; --border: rgba(220,245,240,0.10); --gridline: #203536;
     --accent: #2dd4bf; --accent-wash: rgba(45,212,191,0.16);
-    --good: #4ade80; --warning: #f5c26b; --critical: #f27171;
+    /* This teal is bright (OKLCH L=0.785) - white text on it is only 1.86:1 (WCAG fail).
+       Dark ink gives 9.86:1, so buttons use the page color as their text in dark mode. */
+    --button-ink: var(--page);
+    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   }
 }
 
@@ -31,7 +39,8 @@ body {
   margin: 0; padding: 1rem; line-height: 1.4; font-size: 0.9rem;
 }
 
-.app-header h1 { font-size: 1.1rem; margin: 0 0 0.8rem; }
+.app-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem; }
+.app-header h1 { font-size: 1.1rem; margin: 0; }
 
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -49,7 +58,7 @@ textarea {
 
 button.primary {
   margin-top: 0.7rem; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600;
-  color: #fff; background: var(--accent); border: none; border-radius: 8px; cursor: pointer;
+  color: var(--button-ink); background: var(--accent); border: none; border-radius: 8px; cursor: pointer;
   width: 100%;
 }
 button.primary:disabled { opacity: 0.55; }

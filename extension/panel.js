@@ -28,7 +28,8 @@ let currentGenerateResult = null;
 
 function scoreColor(score) {
   if (score >= 8) return "var(--good)";
-  if (score >= 5) return "var(--warning)";
+  if (score >= 6) return "var(--warning)";
+  if (score >= 4) return "var(--serious)";
   return "var(--critical)";
 }
 
@@ -38,7 +39,8 @@ function fileLink(filename, label) {
 
 function matchLabel(score) {
   if (score >= 8) return "STRONG MATCH";
-  if (score >= 5) return "GOOD MATCH";
+  if (score >= 6) return "GOOD MATCH";
+  if (score >= 4) return "FAIR MATCH";
   return "WEAK MATCH";
 }
 

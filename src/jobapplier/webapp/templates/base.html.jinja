@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>jobApplier</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='1.5' width='15' height='19' rx='3' fill='%23037568'/%3E%3Cpath d='M5.5 6.5h8M5.5 10h8M5.5 13.5h5' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='18' cy='18' r='5.5' fill='%23fff'/%3E%3Cpath d='M15.6 18.1l1.7 1.7 3.1-3.4' stroke='%23037568' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
   <style>
     :root {
       color-scheme: light;
@@ -14,10 +15,18 @@
       --text-muted:  #898781;
       --border:      rgba(11,11,11,0.10);
       --gridline:    #e1e0d9;
-      --accent:      #2a78d6;
-      --accent-wash: rgba(42,120,214,0.10);
+      /* Teal brand accent - same hue family as the dark-mode accent below (just a darker,
+         more saturated step for the light surface), so the brand color doesn't switch hues
+         when the theme flips. Validated: OKLCH L=0.505/C=0.090, 5.31:1 vs this page, 5.60:1
+         for white button text. */
+      --accent:      #037568;
+      --accent-wash: rgba(3,117,104,0.10);
+      --button-ink:  #ffffff;
+      /* Status colors are fixed/theme-invariant by design (see dark block below) - a status
+         never changes hue when the theme flips, only the surface around it does. */
       --good:        #0ca30c;
-      --warning:     #c98500;
+      --warning:     #fab219;
+      --serious:     #ec835a;
       --critical:    #d03b3b;
       --highlight:   #eda100;
       --highlight-wash: rgba(237,161,0,0.20);
@@ -38,9 +47,14 @@
         --gridline:    #203536;
         --accent:      #2dd4bf;
         --accent-wash: rgba(45,212,191,0.16);
-        --good:        #4ade80;
-        --warning:     #f5c26b;
-        --critical:    #f27171;
+        /* This teal is bright (OKLCH L=0.785) - white text on it is only 1.86:1 (WCAG fail).
+           Dark ink gives 9.86:1, so buttons use the page color as their text instead of
+           white in dark mode specifically. */
+        --button-ink:  var(--page);
+        --good:        #0ca30c;
+        --warning:     #fab219;
+        --serious:     #ec835a;
+        --critical:    #d03b3b;
         --highlight:   #f5c26b;
         --highlight-wash: rgba(245,194,107,0.24);
       }
@@ -146,7 +160,7 @@
 
     button.primary {
       margin-top: 0.85rem; padding: 0.55rem 1.3rem; font-size: 0.9rem; font-weight: 600;
-      color: #fff; background: var(--accent); border: none; border-radius: 8px;
+      color: var(--button-ink); background: var(--accent); border: none; border-radius: 8px;
       cursor: pointer; transition: filter 0.15s, transform 0.05s;
     }
     button.primary:hover { filter: brightness(1.08); }
@@ -223,7 +237,7 @@
     #chat-log:empty { display: none; }
     .bubble-user {
       align-self: flex-end; max-width: 85%;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--button-ink);
       padding: 0.55rem 0.9rem; border-radius: 14px 14px 3px 14px;
       font-size: 0.9rem;
     }
@@ -254,7 +268,7 @@
     }
     .pagination button:hover:not(:disabled) { filter: brightness(0.95); }
     .pagination button:disabled { opacity: 0.4; cursor: default; }
-    .pagination button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .pagination button.active { background: var(--accent); color: var(--button-ink); border-color: var(--accent); }
 
     /* Job-list cards (alerts, applications) - the match score is an integrated dark panel
        spanning the full card height on the right, not a thin bar floating in empty space. */
@@ -287,8 +301,10 @@
       <div class="sidebar-top">
         <div class="brand">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="2" width="18" height="20" rx="3" fill="var(--accent)"/>
-            <path d="M7 7h10M7 11h10M7 15h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            <rect x="2" y="1.5" width="15" height="19" rx="3" fill="var(--accent)"/>
+            <path d="M5.5 6.5h8M5.5 10h8M5.5 13.5h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="18" cy="18" r="5.5" fill="var(--surface)"/>
+            <path d="M15.6 18.1l1.7 1.7 3.1-3.4" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
           </svg>
           <span class="brand-name">jobApplier</span>
         </div>
@@ -338,7 +354,8 @@
 
     function scoreColor(score) {
       if (score >= 8) return 'var(--good)';
-      if (score >= 5) return 'var(--warning)';
+      if (score >= 6) return 'var(--warning)';
+      if (score >= 4) return 'var(--serious)';
       return 'var(--critical)';
     }
 
@@ -363,7 +380,8 @@
 
     function matchLabel(score) {
       if (score >= 8) return 'STRONG MATCH';
-      if (score >= 5) return 'GOOD MATCH';
+      if (score >= 6) return 'GOOD MATCH';
+      if (score >= 4) return 'FAIR MATCH';
       return 'WEAK MATCH';
     }
 
