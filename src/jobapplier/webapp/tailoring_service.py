@@ -186,6 +186,7 @@ RESUME_BLOCK = """
 the input - same section types, same keys):
 {
   "name": str,
+  "tagline": str | null,
   "contact": [str, ...],
   "sections": [
     {"title": str, "type": "paragraph", "content": str},
@@ -218,6 +219,8 @@ ATS and for human recruiters:
 - Do not change dates, titles, company names, or numeric metrics.
 - Keep every section from the input present in the output, in the same section order, and
   keep entries (companies/projects) within each section in the same order.
+- Carry "tagline" through unchanged if present. Never repeat its text inside a section's
+  content, even if a section's paragraph happens to start with the same words.
 
 "changes" must be a list of 3-8 short strings, each describing one concrete edit you
 actually made and why. Do not list vague statements like "improved overall quality" - be

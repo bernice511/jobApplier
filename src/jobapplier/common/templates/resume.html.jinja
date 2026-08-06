@@ -38,6 +38,7 @@
     letter-spacing: 0.5pt;
     color: {{ style.name_color }};
   }
+  .tagline { font-size: {{ style.body_font_size_pt + 0.5 }}pt; margin-top: 0pt; color: {{ style.name_color }}; }
   .contact { font-size: {{ style.body_font_size_pt - 0.5 }}pt; margin-top: 0pt; color: {{ style.contact_color }}; }
   .contact a { color: {{ style.contact_color }}; text-decoration: none; }
   .section-title {
@@ -77,12 +78,14 @@
     <img class="photo" src="{{ style.photo_data_uri }}" alt="">
     <div class="header-text">
       <div class="name">{{ name }}</div>
+      {% if tagline %}<div class="tagline">{{ tagline }}</div>{% endif %}
       <div class="contact">{{ contact | join(' | ') }}</div>
     </div>
   </div>
   {% else %}
   <div class="header">
     <div class="name">{{ name }}</div>
+    {% if tagline %}<div class="tagline">{{ tagline }}</div>{% endif %}
     <div class="contact">{{ contact | join(' | ') }}</div>
   </div>
   {% endif %}

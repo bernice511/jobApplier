@@ -37,6 +37,9 @@ Convert the resume text below into this exact JSON schema (no extra commentary, 
 
 {
   "name": str,
+  "tagline": str | null,        // a short subtitle/headline line directly under the name and
+                                 // before the contact line (e.g. "Electronics & Embedded
+                                 // Systems Engineer") - null if the resume has no such line
   "contact": [str, ...],
   "sections": [
     // one of three shapes, in the same order they appear in the resume:
@@ -68,6 +71,11 @@ Rules:
 - Every section from the resume must be included, in its original order, using whichever of the three "type" shapes fits it.
 - Use "subentries": [] (empty list) when an entry has no nested sub-roles.
 - Use null (not empty string) for header_left_normal, sub_left, sub_right when not applicable.
+- If a section's paragraph (e.g. "Profile"/"Summary") happens to START WITH THE SAME WORDS as
+  the tagline (a common coincidence, since a candidate's headline and the opening of their
+  summary often overlap), that is NOT a signal to merge them - put the tagline in "tagline"
+  EXACTLY ONCE, and that section's own full original sentence in its "content" EXACTLY ONCE.
+  Never repeat the tagline text a second time inside a section's content.
 - Output ONLY the JSON object, nothing else.
 
 Resume text:
