@@ -2,16 +2,10 @@
   "manifest_version": 3,
   "name": "jobApplier Assistant",
   "version": "0.1.0",
-  "description": "Reads the job you're viewing (LinkedIn, Indeed, Greenhouse, Lever, Workday, or ADP) and tailors your resume/cover letter via your local jobApplier backend.",
-  "permissions": ["storage", "sidePanel"],
+  "description": "Reads the job you're viewing (LinkedIn, Indeed, Greenhouse, Lever, Workday, ADP, or elsewhere) and tailors your resume/cover letter via your local jobApplier backend.",
+  "permissions": ["storage", "sidePanel", "scripting"],
   "host_permissions": [
-    "*://*.linkedin.com/*",
-    "*://*.indeed.com/*",
-    "*://*.greenhouse.io/*",
-    "*://*.lever.co/*",
-    "*://*.myworkdayjobs.com/*",
-    "*://myjobs.adp.com/*",
-    "http://127.0.0.1:5050/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -26,7 +20,7 @@
         "*://*.myworkdayjobs.com/*",
         "*://myjobs.adp.com/*"
       ],
-      "js": ["content.js", "autofill.js"],
+      "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": true
     }

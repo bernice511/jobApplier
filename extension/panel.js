@@ -294,6 +294,24 @@ function sendAutofillMessage(tabId, profile, files) {
   });
 }
 
+function injectAutofillScript(tabId) {
+  return chrome.scripting.executeScript({ target: { tabId }, files: ["autofill.js"] });
+}
+
+// autofill.js isn't statically declared for every possible domain (application forms can live
+// on a company's own site, not just the known ATS platforms) - try messaging first (works
+// immediately on the sites where it's already statically injected), and only pay the cost of
+// an on-demand injection if nothing responds. autofill.js's own top-level loaded-guard makes a
+// repeat injection on the same page (e.g. clicking Autofill twice) a safe no-op.
+async function sendAutofillMessageWithInject(tabId, profile, files) {
+  try {
+    return await sendAutofillMessage(tabId, profile, files);
+  } catch {
+    await injectAutofillScript(tabId);
+    return sendAutofillMessage(tabId, profile, files);
+  }
+}
+
 async function onAutofill() {
   const autofillStatus = document.getElementById("autofill-status");
   const autofillResultEl = document.getElementById("autofill-result");
@@ -337,10 +355,10 @@ async function onAutofill() {
     const tab = await getActiveTab();
     let response;
     try {
-      response = await sendAutofillMessage(tab.id, profile, files);
+      response = await sendAutofillMessageWithInject(tab.id, profile, files);
     } catch (err) {
       throw new Error(
-        "Couldn't find the application form on this tab - open the actual application page (not just the job listing) and try again."
+        "Couldn't run autofill on this tab - it may be a page the browser doesn't allow extensions on (e.g. a chrome:// or the Chrome Web Store page). Open the actual application page and try again."
       );
     }
 

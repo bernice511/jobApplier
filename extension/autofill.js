@@ -4,8 +4,15 @@
 // answer for a question it can't confidently match. The user reviews every filled field
 // (each gets a visible outline so a wrong match isn't easy to skim past) and submits by hand.
 //
-// Loaded alongside content.js (see manifest.json's content_scripts) rather than as a separate
-// injection, so it shares the same execution context/lifetime with no extra permissions.
+// Deliberately NOT statically declared in manifest.json's content_scripts (unlike content.js)
+// - company application forms can live on ANY domain (a company's own site, not just the
+// known ATS platforms), so panel.js injects this on demand via chrome.scripting.executeScript
+// at the moment "Autofill" is clicked, rather than needing every possible domain listed ahead
+// of time. That means a repeat click on the same page (without a reload in between) could
+// inject this file again - the loaded-guard below makes that a no-op instead of registering a
+// second message listener and double-filling everything.
+if (!window.__jobapplierAutofillLoaded) {
+window.__jobapplierAutofillLoaded = true;
 
 // Consent/attestation/certification checkboxes and radios are a different category from
 // screening questions - auto-answering them is functionally closer to submitting on the
@@ -361,3 +368,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
   }
 });
+
+} // window.__jobapplierAutofillLoaded guard

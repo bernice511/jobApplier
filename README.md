@@ -190,41 +190,47 @@ extension as intentionally scrape-only, contrasting it with the semi-automated
 `linkedin_apply/main.py` flow's own confirm-before-submit gate) - the *no-auto-submit*
 half of that safety posture stays fully intact, only the *never-fills-anything* half changes.
 
+**Two different access models, on purpose.** JD scraping (`content.js`, showing the detected
+title/company/description in the panel automatically) is statically injected only on a known
+list of ATS platforms - it's always-running/background, so it stays conservative to avoid
+misfiring on random pages you're just browsing. Autofill (`autofill.js`) is injected
+on-demand, only at the moment you click the button (`chrome.scripting.executeScript`, backed
+by `host_permissions: ["<all_urls>"]`) - since a company's actual application form can live on
+literally any domain it owns (not just the known ATS platforms - see the ADP/Bay Novation
+example below), and autofill only ever runs when you explicitly ask it to, it doesn't need the
+same background-scraping caution. Practically: the detected-job title/company/description
+might not populate on an arbitrary company's own apply page, but the Autofill button still
+works there regardless, using whatever tab is currently active.
+
 Known gaps: file upload only works if the page has a real `<input type="file">` - some ATS
 platforms use custom drag-and-drop widgets with no such element, and those get reported as
-"attach manually" rather than faked. Indeed in particular sometimes redirects "Apply" to a
-different domain the extension was never given access to; if that happens, open the actual
-application page and retry rather than the job listing page. Field-matching selectors for
-Indeed/Greenhouse/Lever/Workday's *application forms* (as opposed to their job-description
-pages, which are checked against real markup) are a generic label-based fallback, not
-confirmed against a live page of each - expect to iterate here the same way the JD-scraper
-selectors below did.
+"attach manually" rather than faked. Job boards often redirect "Apply" through several domains
+before landing on the real form (LinkedIn -> an ATS platform -> sometimes further to the
+company's own site, e.g. `myjobs.adp.com` -> `baynovation.com` was one observed chain) -
+autofill's on-demand injection handles this fine since it doesn't need the domain
+pre-registered, but if the *first* injection attempt fails silently (rare - e.g. a page Chrome
+blocks all extensions from, like `chrome://` pages or the Chrome Web Store), you'll see an
+explicit error rather than a stuck spinner. Autofill's on-demand injection only reaches the
+page's TOP frame, not nested iframes - if a company's own apply page ALSO embeds its form in
+an iframe (the way ADP's `myjobs.adp.com` does), autofill may find nothing even though the form
+is visible; `content.js`'s static injection (the known ATS list only) does check every frame
+(`all_frames: true`) for exactly this reason, but that fix hasn't been extended to the
+on-demand autofill path yet. Field-matching selectors for application forms on
+Indeed/Greenhouse/Lever/Workday/ADP (as opposed to their job-description pages, which are
+checked against real markup) are a generic label-based fallback, not confirmed against a live
+page of each - expect to iterate here the same way the JD-scraper selectors below did.
 
-Supported sites: LinkedIn, Indeed, Greenhouse, Lever, Workday, and ADP (`myjobs.adp.com`).
+JD-scraping sites: LinkedIn, Indeed, Greenhouse, Lever, Workday, and ADP (`myjobs.adp.com`).
 LinkedIn/Indeed/Greenhouse/Lever/Workday each have their own extractor in
 `extension/content.js` (`SITE_EXTRACTORS`); ADP has none yet and runs entirely on the generic
-fallback (`extractGeneric()` for scraping, the generic label-walker for autofill) - same
-starting point the other four had before their selectors were confirmed against real
-markup. Anything a site-specific extractor misses (or any other, unlisted site entirely) also
-falls back to the same generic heuristic rather than coming back empty. Company/title/location
-mis-detection isn't fatal even then - the backend's `analyze_jd()` re-derives all three from
-the pasted JD text anyway, so extraction accuracy matters most for the description text, not
-those fields.
-
-If you hit a job site that isn't in this list at all (the content script never even loads
-there, so autofill's "couldn't find the application form" error is really "this domain isn't
-in `manifest.json` yet," not a form-detection failure) - add its host to both
-`host_permissions` and `content_scripts.matches` in `extension/manifest.json`, the same way
-ADP was added.
-
-The content scripts run in every frame of the page (`all_frames: true`), not just the top
-one - some ATS platforms (ADP included) embed the real application form in a same-origin
-iframe rather than the top-level page, and without this the extension would only ever see the
-outer page shell (a generic title, a cookie-consent widget) and never the actual form fields.
-If autofill still finds nothing on a page that clearly has a form, check whether that form's
-iframe is on a DIFFERENT domain than the page itself (view the page source, or right-click the
-form and "Inspect") - if so, that domain needs adding to `manifest.json` too, the same as any
-other unsupported site.
+fallback (`extractGeneric()`) - same starting point the other four had before their selectors
+were confirmed against real markup. Anything a site-specific extractor misses (or any other,
+unlisted site entirely) also falls back to the same generic heuristic rather than coming back
+empty. Company/title/location mis-detection isn't fatal even then - the backend's
+`analyze_jd()` re-derives all three from the pasted JD text anyway, so extraction accuracy
+matters most for the description text, not those fields. If you want automatic JD detection on
+a site that isn't in this list, add its host to `content_scripts.matches` in
+`extension/manifest.json` (autofill itself doesn't need this - it already works everywhere).
 
 Setup:
 1. Copy `data/answers/screening_answers.example.yaml` to `data/answers/screening_answers.yaml`
