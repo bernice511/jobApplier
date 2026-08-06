@@ -252,15 +252,21 @@ async function onGenerate() {
     }
 
     if (data.resume_preview_html) {
-      html += `
-        <p class="preview-note">Highlighted = reworded from your master resume. Preview only - the downloaded PDF is clean.</p>
-        <div class="preview-box">${data.resume_preview_html}</div>
-      `;
+      html += `<button class="secondary preview-open-btn" style="width:100%;">View resume preview</button>`;
     }
     html += `</div>`;
 
     currentGenerateResult = data;
     generateResult.innerHTML = html;
+
+    if (data.resume_preview_html) {
+      generateResult.querySelector(".preview-open-btn").addEventListener("click", () => {
+        const dialog = document.getElementById("preview-dialog");
+        document.getElementById("preview-dialog-content").innerHTML = data.resume_preview_html;
+        dialog.showModal();
+        dialog.scrollTop = 0; // showModal() can otherwise land scrolled past the title/note
+      });
+    }
   } catch (e) {
     clearInterval(timer);
     generateStatus.innerHTML = "";
@@ -476,6 +482,13 @@ profileCloseBtn.addEventListener("click", () => profileDialog.close());
 // <dialog> only closes via .close()/Escape by default, not a backdrop click.
 profileDialog.addEventListener("click", (e) => {
   if (e.target === profileDialog) profileDialog.close();
+});
+
+const previewDialog = document.getElementById("preview-dialog");
+const previewCloseBtn = document.getElementById("preview-close-btn");
+previewCloseBtn.addEventListener("click", () => previewDialog.close());
+previewDialog.addEventListener("click", (e) => {
+  if (e.target === previewDialog) previewDialog.close();
 });
 
 profileSaveBtn.addEventListener("click", async () => {
