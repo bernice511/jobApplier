@@ -11,6 +11,14 @@ const analyzeStatus = document.getElementById("analyze-status");
 const analyzeResult = document.getElementById("analyze-result");
 const generateResult = document.getElementById("generate-result");
 const autofillBtn = document.getElementById("autofill-btn");
+const profileDetails = document.getElementById("profile-details");
+const profileSaveBtn = document.getElementById("profile-save-btn");
+
+const PROFILE_FIELDS = [
+  "first_name", "last_name", "phone", "email", "work_authorization", "requires_sponsorship",
+  "notice_period_days", "salary_expectation", "years_experience_default", "linkedin_url",
+  "github_url", "website_url",
+];
 
 let currentJob = null;
 let currentAnalysis = null;
@@ -427,6 +435,62 @@ function renderAutofillResult(result) {
     });
   });
 }
+
+let profileLoaded = false;
+
+async function loadProfileFields() {
+  const statusEl = document.getElementById("profile-save-status");
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/profile`);
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.innerHTML = `<div class="error-box">${data.error || "Could not load your profile."}</div>`;
+      return;
+    }
+    PROFILE_FIELDS.forEach((key) => {
+      const el = document.getElementById(`profile-${key}`);
+      if (el) el.value = data[key] || "";
+    });
+    profileLoaded = true;
+  } catch (e) {
+    statusEl.innerHTML = `<div class="error-box">${e}</div>`;
+  }
+}
+
+profileDetails.addEventListener("toggle", () => {
+  if (profileDetails.open && !profileLoaded) loadProfileFields();
+});
+
+profileSaveBtn.addEventListener("click", async () => {
+  const statusEl = document.getElementById("profile-save-status");
+  const fields = {};
+  PROFILE_FIELDS.forEach((key) => {
+    const el = document.getElementById(`profile-${key}`);
+    if (el) fields[key] = el.value.trim();
+  });
+
+  profileSaveBtn.disabled = true;
+  const timer = startLoading(statusEl, "Saving...");
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const data = await resp.json();
+    clearInterval(timer);
+    if (!resp.ok) {
+      statusEl.innerHTML = `<div class="error-box">${data.error || "Save failed."}</div>`;
+      return;
+    }
+    statusEl.innerHTML = '<div class="hint">Saved - applies to every application from now on.</div>';
+  } catch (e) {
+    clearInterval(timer);
+    statusEl.innerHTML = `<div class="error-box">${e}</div>`;
+  } finally {
+    profileSaveBtn.disabled = false;
+  }
+});
 
 autofillBtn.addEventListener("click", onAutofill);
 

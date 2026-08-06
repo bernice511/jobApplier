@@ -125,3 +125,13 @@ button.secondary:disabled { opacity: 0.55; }
   width: 100%; margin-bottom: 0.4rem; font-family: inherit; font-size: 0.82rem; color: var(--text-1);
   background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.55rem;
 }
+
+#profile-details { font-size: 0.82rem; }
+#profile-details summary { cursor: pointer; }
+.profile-fields { margin-top: 0.6rem; }
+.profile-field { margin-bottom: 0.5rem; }
+.profile-field label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+.profile-field input {
+  width: 100%; font-family: inherit; font-size: 0.82rem; color: var(--text-1);
+  background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.55rem;
+}

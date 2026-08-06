@@ -15,6 +15,28 @@
     <code>python3 -m jobapplier.webapp</code>
   </div>
 
+  <div class="card">
+    <details id="profile-details">
+      <summary class="hint">Your profile (name, phone, salary, etc. - click to edit)</summary>
+      <div class="profile-fields">
+        <div class="profile-field"><label for="profile-first_name">First name</label><input id="profile-first_name"></div>
+        <div class="profile-field"><label for="profile-last_name">Last name</label><input id="profile-last_name"></div>
+        <div class="profile-field"><label for="profile-phone">Phone</label><input id="profile-phone"></div>
+        <div class="profile-field"><label for="profile-email">Email</label><input id="profile-email"></div>
+        <div class="profile-field"><label for="profile-work_authorization">Authorized to work?</label><input id="profile-work_authorization"></div>
+        <div class="profile-field"><label for="profile-requires_sponsorship">Requires sponsorship?</label><input id="profile-requires_sponsorship"></div>
+        <div class="profile-field"><label for="profile-notice_period_days">Notice period (days)</label><input id="profile-notice_period_days"></div>
+        <div class="profile-field"><label for="profile-salary_expectation">Salary expectation</label><input id="profile-salary_expectation"></div>
+        <div class="profile-field"><label for="profile-years_experience_default">Years of experience (default)</label><input id="profile-years_experience_default"></div>
+        <div class="profile-field"><label for="profile-linkedin_url">LinkedIn URL</label><input id="profile-linkedin_url"></div>
+        <div class="profile-field"><label for="profile-github_url">GitHub URL</label><input id="profile-github_url"></div>
+        <div class="profile-field"><label for="profile-website_url">Website/portfolio URL</label><input id="profile-website_url"></div>
+      </div>
+      <button class="secondary" id="profile-save-btn">Save</button>
+      <div id="profile-save-status"></div>
+    </details>
+  </div>
+
   <div class="card" id="detected-card">
     <div class="hint" id="detected-status">Open a LinkedIn job posting to detect it here.</div>
     <div id="detected-job" style="display:none;">
