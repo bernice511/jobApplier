@@ -105,6 +105,10 @@ function showJob(job) {
     // this new one. Autofill falls back to the active resume's raw PDF until Generate is run
     // again for this job.
     currentGenerateResult = null;
+    // Analyze automatically instead of waiting for a click - analyze_jd() is cached
+    // server-side (see analyze_cache.py), so re-opening a job already analyzed against the
+    // same resume returns instantly rather than re-running the pipeline.
+    runAnalyze();
   }
 }
 
@@ -120,7 +124,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-analyzeBtn.addEventListener("click", async () => {
+async function runAnalyze() {
   const jdText = jdTextEl.value.trim();
   if (!jdText) return;
   analyzeResult.innerHTML = "";
@@ -151,7 +155,11 @@ analyzeBtn.addEventListener("click", async () => {
   } finally {
     analyzeBtn.disabled = false;
   }
-});
+}
+
+// Kept as a manual re-run (e.g. after editing the JD text by hand) - the automatic call on
+// job detection below covers the normal case.
+analyzeBtn.addEventListener("click", runAnalyze);
 
 function renderAnalysis(data) {
   let html = `<div class="card">`;

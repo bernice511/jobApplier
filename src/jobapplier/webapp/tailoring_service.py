@@ -275,24 +275,27 @@ def _compute_match_score(matched_count: int, suggested_count: int, core_requirem
     return max(0, min(10, round(coverage * 10)))
 
 
-# Extraction and classification use a minimal, purpose-built system prompt instead of the
-# CLI's default (see claude_cli.py's docstring for the ~25k-cached-token overhead this
-# avoids), but deliberately stay on the CLI's DEFAULT model rather than overriding to Haiku.
-# Measured on a real classify_batch call (9.6KB resume, 5-item batch): Haiku took 27.7-62.6s
-# and cost $0.021-0.047, while the default model (Sonnet) took 5.5-8.0s for $0.035-0.041 - a
-# smaller/cheaper-per-token model was neither faster nor actually cheaper here, because it
-# generated far more tokens visibly struggling with the matched/suggested/unmet judgment call
-# against a multi-section resume. --effort low alone (still on the default model) was the
-# single biggest win: 5.5s vs 8.0s at effort default, no quality trade-off observed.
-_FAST_SYSTEM_PROMPT = (
-    "You are a JSON extraction/classification tool. Follow the user's instructions exactly "
-    "and respond with nothing but the requested JSON."
+# Every Claude call in this file (extraction, classification, AND full resume/cover-letter
+# generation) uses this minimal, purpose-built system prompt instead of the CLI's default
+# (see claude_cli.py's docstring for the ~25k-cached-token overhead this avoids on every
+# single call), but deliberately stays on the CLI's DEFAULT model rather than overriding to
+# Haiku. Measured on a real classify_batch call (9.6KB resume, 5-item batch): Haiku took
+# 27.7-62.6s and cost $0.021-0.047, while the default model (Sonnet) took 5.5-8.0s for
+# $0.035-0.041 - a smaller/cheaper-per-token model was neither faster nor actually cheaper
+# here, because it generated far more tokens visibly struggling with the matched/
+# suggested/unmet judgment call against a multi-section resume. Not extraction/classification
+# specific wording, since the same prompt is reused for the generation calls below too -
+# the actual task framing (resume writer, truthfulness rules, etc.) lives in each call's own
+# user-turn prompt, not here.
+_JSON_SYSTEM_PROMPT = (
+    "You are a JSON generation tool. Follow the user's instructions exactly and respond with "
+    "nothing but the requested JSON."
 )
 
 
 def _extract_requirements(jd_text: str) -> dict:
     prompt = EXTRACT_REQUIREMENTS_INSTRUCTIONS.replace("{jd_text}", jd_text)
-    return call_claude_json(prompt, system_prompt=_FAST_SYSTEM_PROMPT)
+    return call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
 
 
 def _classify_batch(master_resume_json: str, batch: list[str]) -> dict:
@@ -301,7 +304,7 @@ def _classify_batch(master_resume_json: str, batch: list[str]) -> dict:
         .replace("{master_resume_json}", master_resume_json)
         .replace("{batch_json}", json.dumps(batch, indent=2))
     )
-    return call_claude_json(prompt, system_prompt=_FAST_SYSTEM_PROMPT)
+    return call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
 
 
 def _chunk(items: list, n_chunks: int) -> list[list]:
@@ -424,7 +427,7 @@ def _generate_resume(jd_text, master_resume, company, title, location, approved_
     prompt = _build_prompt(
         jd_text, master_resume, company, title, location, "resume", approved_keywords, notes
     )
-    result = call_claude_json(prompt)
+    result = call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
     if "resume" not in result:
         raise ValueError("Claude response missing 'resume' key")
     return result
@@ -434,7 +437,7 @@ def _generate_cover_letter(jd_text, master_resume, company, title, location, app
     prompt = _build_prompt(
         jd_text, master_resume, company, title, location, "cover_letter", approved_keywords, notes
     )
-    result = call_claude_json(prompt)
+    result = call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
     if "cover_letter" not in result:
         raise ValueError("Claude response missing 'cover_letter' key")
     return result
