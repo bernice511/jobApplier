@@ -494,7 +494,8 @@ profileSaveBtn.addEventListener("click", async () => {
       statusEl.innerHTML = `<div class="error-box">${data.error || "Save failed."}</div>`;
       return;
     }
-    statusEl.innerHTML = '<div class="hint">Saved - applies to every application from now on.</div>';
+    statusEl.innerHTML = "";
+    profileDialog.close();
   } catch (e) {
     clearInterval(timer);
     statusEl.innerHTML = `<div class="error-box">${e}</div>`;
