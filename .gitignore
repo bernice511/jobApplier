@@ -8,6 +8,9 @@ data/applications.csv
 data/tailoring_log.csv
 data/resume/master_resume.json
 data/resume/master_resume.pdf
+data/resume/master_resume_style.json
+data/resume/master_resume_photo.png
+data/analyze_cache.json
 data/answers/screening_answers.yaml
 data/answers/screening_answers.example.yaml
 .DS_Store

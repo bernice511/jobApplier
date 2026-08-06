@@ -31,7 +31,7 @@ from jobapplier.common import resume_parser
 from jobapplier.common.claude_cli import call_claude_json
 from jobapplier.common.config import GENERATED_DIR
 from jobapplier.common.resume_template import render_cover_letter, render_resume
-from jobapplier.webapp import resume_diff, tailoring_log
+from jobapplier.webapp import analyze_cache, resume_diff, tailoring_log
 from jobapplier.webapp.resume_preview import render_resume_preview_html
 
 GenerateOption = Literal["both", "resume", "cover_letter"]
@@ -320,9 +320,17 @@ def analyze_jd(jd_text: str) -> dict:
     (tried first) barely moved the needle, because the real cost is the number of individual
     matched/suggested/unmet judgments, not how verbosely each one is written out. Running
     those judgments as parallel batches is bounded by the slowest batch instead of the sum of
-    all of them, the same concurrency trick used for resume+cover-letter generation."""
+    all of them, the same concurrency trick used for resume+cover-letter generation.
+
+    Checks analyze_cache first - re-opening a job already analyzed against the SAME master
+    resume (including a spurious re-extraction from content.js re-publishing an unchanged job,
+    see panel.js's isNewJob guard) returns instantly instead of re-running the pipeline."""
     jd_text = _clean_jd_text(jd_text)
     master_resume = resume_parser.parse_and_cache()
+
+    cached = analyze_cache.get(jd_text, master_resume)
+    if cached is not None:
+        return cached
 
     extracted = _extract_requirements(jd_text)
     requirements = extracted.get("requirements", [])
@@ -349,7 +357,7 @@ def analyze_jd(jd_text: str) -> dict:
     # exactly len(requirements), not a separately-asked-for number that could disagree.
     core_requirement_count = len(requirements)
 
-    return {
+    result = {
         "company": extracted.get("company") or "Unknown Company",
         "title": extracted.get("title") or "Unknown Title",
         "location": extracted.get("location") or "",
@@ -358,6 +366,8 @@ def analyze_jd(jd_text: str) -> dict:
         "suggested_keywords": suggested_keywords,
         "core_requirement_count": core_requirement_count,
     }
+    analyze_cache.set(jd_text, master_resume, result)
+    return result
 
 
 def _build_prompt(
