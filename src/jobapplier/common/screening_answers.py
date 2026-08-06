@@ -31,3 +31,36 @@ def add_pattern(question: str, answer: str) -> dict:
     data["patterns"][question.strip().lower()] = answer
     save_screening_answers(data)
     return data
+
+
+# Every structured field a user can edit from the webapp's profile page - "patterns" is
+# deliberately excluded, since that's a free-text map managed only via add_pattern().
+STRUCTURED_FIELDS = [
+    "first_name",
+    "last_name",
+    "phone",
+    "email",
+    "work_authorization",
+    "requires_sponsorship",
+    "notice_period_days",
+    "salary_expectation",
+    "years_experience_default",
+    "linkedin_url",
+    "github_url",
+    "website_url",
+]
+
+
+def update_answers(fields: dict) -> dict:
+    """Used by the webapp's profile-editing page so structured fields (name, phone, salary
+    expectation, etc.) can be corrected from the UI instead of requiring a hand-edit of
+    screening_answers.yaml - every autofill/apply_easy.py run afterward picks up the change
+    automatically since they all read through this same module. Only known structured fields
+    are accepted; anything else in `fields` is silently ignored rather than letting an
+    unrelated key (or "patterns" itself) get overwritten by accident."""
+    data = load_screening_answers()
+    for key in STRUCTURED_FIELDS:
+        if key in fields:
+            data[key] = fields[key]
+    save_screening_answers(data)
+    return data

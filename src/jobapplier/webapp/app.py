@@ -50,6 +50,11 @@ def resume_page():
     return render_template("resume.html.jinja", active_page="resume")
 
 
+@app.get("/profile")
+def profile_page():
+    return render_template("profile.html.jinja", active_page="profile")
+
+
 @app.get("/alerts")
 def alerts_page():
     return render_template("alerts.html.jinja", active_page="alerts")
@@ -125,30 +130,28 @@ def resume_file(resume_id):
     return send_file(path)
 
 
-@app.get("/api/autofill-profile")
-def api_autofill_profile():
+def _build_profile() -> dict | None:
     """Combines the active resume's name/contact with screening_answers.yaml's structured
-    fields and patterns map into one flat JSON object - a content script can't read local
-    files directly, so this is the only way that data reaches the browser extension's
-    autofill feature. first_name/last_name come from screening_answers.yaml if the user set
-    them there (many ATS forms split name into two fields); otherwise falls back to a naive
-    split of the resume's single "name" string, which is wrong for some multi-word names but
-    better than nothing.
+    fields and patterns map into one flat dict - shared by the extension's autofill feature
+    (GET /api/autofill-profile) and the webapp's profile-editing page (GET /api/profile), so
+    both always agree on what "the current profile" actually is. Returns None if there's no
+    active resume yet.
 
-    Includes "resume_id" so the extension can attach the active resume's raw PDF (via
-    GET /resume-files/<resume_id>) when autofilling WITHOUT having generated a JD-tailored
-    resume this session - autofill is available as soon as a job is detected, not gated on
-    running Analyze/Generate first."""
+    first_name/last_name come from screening_answers.yaml if the user set them there (many ATS
+    forms split name into two fields, and some multi-word names split incorrectly if left to
+    the naive fallback below) - otherwise falls back to a naive split of the resume's single
+    "name" string. Showing that fallback value (rather than leaving it blank) in the profile
+    page lets the user see exactly what's being guessed today and correct it in one edit."""
     active = resume_store.get_active()
     if active is None:
-        return jsonify({"error": "No active resume set - upload a resume on the Resume page first."}), 400
+        return None
 
     resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
     answers = screening_answers.load_screening_answers()
     name = resume.get("name") or ""
     name_parts = name.split(" ", 1)
 
-    return jsonify({
+    return {
         "resume_id": active["id"],
         "name": name,
         "first_name": answers.get("first_name") or (name_parts[0] if name_parts else ""),
@@ -165,7 +168,35 @@ def api_autofill_profile():
         "github_url": answers.get("github_url", ""),
         "website_url": answers.get("website_url", ""),
         "patterns": answers.get("patterns", {}),
-    })
+    }
+
+
+@app.get("/api/autofill-profile")
+def api_autofill_profile():
+    """A content script can't read local files directly, so this is the only way profile data
+    reaches the browser extension's autofill feature. Includes "resume_id" so the extension
+    can attach the active resume's raw PDF (via GET /resume-files/<resume_id>) when autofilling
+    WITHOUT having generated a JD-tailored resume this session - autofill is available as soon
+    as a job is detected, not gated on running Analyze/Generate first."""
+    profile = _build_profile()
+    if profile is None:
+        return jsonify({"error": "No active resume set - upload a resume on the Resume page first."}), 400
+    return jsonify(profile)
+
+
+@app.get("/api/profile")
+def api_profile_get():
+    profile = _build_profile()
+    if profile is None:
+        return jsonify({"error": "No active resume set - upload a resume on the Resume page first."}), 400
+    return jsonify(profile)
+
+
+@app.post("/api/profile")
+def api_profile_update():
+    fields = request.get_json(silent=True) or {}
+    screening_answers.update_answers(fields)
+    return jsonify(_build_profile() or {"ok": True})
 
 
 @app.post("/api/screening-answers/patterns")

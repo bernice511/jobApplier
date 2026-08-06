@@ -1,0 +1,98 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<style>
+  .profile-field { margin-bottom: 0.8rem; }
+  .profile-field label { display: block; font-size: 0.8rem; color: var(--text-2); margin-bottom: 0.25rem; }
+  .profile-field input {
+    width: 100%; font-family: inherit; font-size: 0.9rem; color: var(--text-1);
+    background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.7rem;
+  }
+  .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+  @media (max-width: 640px) { .profile-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="card">
+  <h2>Your profile</h2>
+  <p class="hint">Used by the browser extension's autofill and the LinkedIn auto-apply flow to
+    fill in application forms. These override the naive guesses made from your resume alone
+    (e.g. a multi-word name split incorrectly) - changes here apply to every application from
+    now on, not just the current one.</p>
+
+  <div class="profile-grid">
+    <div class="profile-field"><label for="first_name">First name</label><input id="first_name"></div>
+    <div class="profile-field"><label for="last_name">Last name</label><input id="last_name"></div>
+    <div class="profile-field"><label for="phone">Phone</label><input id="phone"></div>
+    <div class="profile-field"><label for="email">Email</label><input id="email"></div>
+    <div class="profile-field"><label for="work_authorization">Authorized to work?</label><input id="work_authorization"></div>
+    <div class="profile-field"><label for="requires_sponsorship">Requires sponsorship?</label><input id="requires_sponsorship"></div>
+    <div class="profile-field"><label for="notice_period_days">Notice period (days)</label><input id="notice_period_days"></div>
+    <div class="profile-field"><label for="salary_expectation">Salary expectation</label><input id="salary_expectation"></div>
+    <div class="profile-field"><label for="years_experience_default">Years of experience (default)</label><input id="years_experience_default"></div>
+    <div class="profile-field"><label for="linkedin_url">LinkedIn URL</label><input id="linkedin_url"></div>
+    <div class="profile-field"><label for="github_url">GitHub URL</label><input id="github_url"></div>
+    <div class="profile-field"><label for="website_url">Website/portfolio URL</label><input id="website_url"></div>
+  </div>
+
+  <button class="primary" id="save-btn">Save</button>
+  <div id="save-status"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const FIELDS = [
+    'first_name', 'last_name', 'phone', 'email', 'work_authorization', 'requires_sponsorship',
+    'notice_period_days', 'salary_expectation', 'years_experience_default', 'linkedin_url',
+    'github_url', 'website_url',
+  ];
+  const saveBtn = document.getElementById('save-btn');
+  const saveStatus = document.getElementById('save-status');
+
+  async function loadProfile() {
+    const resp = await fetch('/api/profile');
+    const data = await resp.json();
+    if (!resp.ok) {
+      saveStatus.innerHTML = `<div class="error-box">${data.error || 'Could not load your profile.'}</div>`;
+      saveBtn.disabled = true;
+      return;
+    }
+    FIELDS.forEach((key) => {
+      const el = document.getElementById(key);
+      if (el) el.value = data[key] || '';
+    });
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    const fields = {};
+    FIELDS.forEach((key) => {
+      const el = document.getElementById(key);
+      if (el) fields[key] = el.value.trim();
+    });
+
+    saveBtn.disabled = true;
+    const timer = startLoading(saveStatus, 'Saving...');
+    try {
+      const resp = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      const data = await resp.json();
+      clearInterval(timer);
+      if (!resp.ok) {
+        saveStatus.innerHTML = `<div class="error-box">${data.error || 'Save failed.'}</div>`;
+        return;
+      }
+      saveStatus.innerHTML = '<div class="hint">Saved - every application from now on uses these values.</div>';
+    } catch (e) {
+      clearInterval(timer);
+      saveStatus.innerHTML = `<div class="error-box">${e}</div>`;
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  loadProfile();
+</script>
+{% endblock %}
