@@ -217,6 +217,15 @@ in `manifest.json` yet," not a form-detection failure) - add its host to both
 `host_permissions` and `content_scripts.matches` in `extension/manifest.json`, the same way
 ADP was added.
 
+The content scripts run in every frame of the page (`all_frames: true`), not just the top
+one - some ATS platforms (ADP included) embed the real application form in a same-origin
+iframe rather than the top-level page, and without this the extension would only ever see the
+outer page shell (a generic title, a cookie-consent widget) and never the actual form fields.
+If autofill still finds nothing on a page that clearly has a form, check whether that form's
+iframe is on a DIFFERENT domain than the page itself (view the page source, or right-click the
+form and "Inspect") - if so, that domain needs adding to `manifest.json` too, the same as any
+other unsupported site.
+
 Setup:
 1. Copy `data/answers/screening_answers.example.yaml` to `data/answers/screening_answers.yaml`
    and fill in your real answers, if you haven't already for the `linkedin_apply/` flow -

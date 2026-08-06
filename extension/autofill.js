@@ -24,6 +24,20 @@ const CONSENT_DENYLIST = [
   "e-verify",
 ];
 
+// Page chrome unrelated to the application itself (cookie-consent widgets, chat/support
+// launchers, newsletter signups) sometimes has real <input>/<label> pairs that satisfy the
+// generic label-walker just as well as an actual screening question would - e.g. a
+// cookie-preference-center's own "search cookies" filter box. Skipped outright, same as the
+// consent denylist, rather than reported as an unmatched question needing an answer.
+// Deliberately NOT including a bare "search" term - some legitimate screening questions
+// mention it (e.g. "How did you search for this job?"), so it'd cause more harm than good.
+const NOISE_DENYLIST = ["cookie", "newsletter", "subscribe", "live chat", "chat with us"];
+
+function isNoiseQuestion(questionText) {
+  const q = questionText.trim().toLowerCase();
+  return NOISE_DENYLIST.some((term) => q.includes(term));
+}
+
 // Question-text substring -> profile field, ported from apply_easy.py's QUESTION_KEY_HINTS
 // (kept as a plain duplicated JS table rather than shared codegen infra - it's ~15 entries).
 const QUESTION_KEY_HINTS = [
@@ -232,7 +246,7 @@ function collectGenericRadioGroups() {
 }
 
 function processQuestionField(questionText, profile, result, getters) {
-  if (!questionText || isConsentQuestion(questionText)) return;
+  if (!questionText || isConsentQuestion(questionText) || isNoiseQuestion(questionText)) return;
 
   const answer = matchAnswer(questionText, profile);
   if (!answer) {

@@ -225,7 +225,24 @@ function maybePublish() {
   lastKey = key;
 
   try {
-    chrome.storage.local.set({ jobapplier_current_job: job });
+    // Content scripts now run in every frame (see manifest.json's all_frames - needed so
+    // sites that embed their real application form in a same-origin iframe, e.g. ADP, are
+    // actually reachable at all). That means multiple frames of the SAME page can each try to
+    // publish independently - if another frame of this exact page already found a longer,
+    // more-likely-real description, don't let a shorter one (an ad iframe, a cookie-consent
+    // widget's own frame, etc.) clobber it. A genuinely different page/job (different url)
+    // always overwrites - this guard is only about frames racing on the SAME page.
+    chrome.storage.local.get("jobapplier_current_job", (data) => {
+      const existing = data.jobapplier_current_job;
+      if (
+        existing &&
+        existing.url === job.url &&
+        job.description.length < existing.description.length
+      ) {
+        return;
+      }
+      chrome.storage.local.set({ jobapplier_current_job: job });
+    });
   } catch (err) {
     // "Extension context invalidated" - this tab's content script is from a version of the
     // extension that was reloaded/updated since injection (e.g. via chrome://extensions'

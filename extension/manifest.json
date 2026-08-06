@@ -27,7 +27,8 @@
         "*://myjobs.adp.com/*"
       ],
       "js": ["content.js", "autofill.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "action": {
