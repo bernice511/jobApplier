@@ -10,6 +10,7 @@ const analyzeBtn = document.getElementById("analyze-btn");
 const analyzeStatus = document.getElementById("analyze-status");
 const analyzeResult = document.getElementById("analyze-result");
 const generateResult = document.getElementById("generate-result");
+const autofillBtn = document.getElementById("autofill-btn");
 
 let currentJob = null;
 let currentAnalysis = null;
@@ -83,6 +84,11 @@ function showJob(job) {
   if (isNewJob) {
     analyzeResult.innerHTML = "";
     generateResult.innerHTML = "";
+    document.getElementById("autofill-result").innerHTML = "";
+    // A freshly-tailored resume/cover letter belongs to the PREVIOUS job - don't attach it to
+    // this new one. Autofill falls back to the active resume's raw PDF until Generate is run
+    // again for this job.
+    currentGenerateResult = null;
   }
 }
 
@@ -235,17 +241,10 @@ async function onGenerate() {
         <div class="preview-box">${data.resume_preview_html}</div>
       `;
     }
-    html += `
-      <button class="primary" id="autofill-btn">Autofill this application</button>
-      <p class="preview-note">Fills in what it can match on the open tab - never clicks Submit/Apply, never checks agreement/consent boxes. Review before you submit.</p>
-      <div id="autofill-status"></div>
-      <div id="autofill-result"></div>
-    `;
     html += `</div>`;
 
     currentGenerateResult = data;
     generateResult.innerHTML = html;
-    document.getElementById("autofill-btn").addEventListener("click", onAutofill);
   } catch (e) {
     clearInterval(timer);
     generateStatus.innerHTML = "";
@@ -258,6 +257,12 @@ async function onGenerate() {
 async function fetchFileAsArrayBuffer(filename) {
   const resp = await fetch(`${BACKEND_URL}/files/${encodeURIComponent(filename)}`);
   if (!resp.ok) throw new Error(`Could not fetch ${filename}`);
+  return resp.arrayBuffer();
+}
+
+async function fetchActiveResumeAsArrayBuffer(resumeId) {
+  const resp = await fetch(`${BACKEND_URL}/resume-files/${encodeURIComponent(resumeId)}`);
+  if (!resp.ok) throw new Error("Could not fetch your active resume.");
   return resp.arrayBuffer();
 }
 
@@ -290,7 +295,6 @@ function sendAutofillMessage(tabId, profile, files) {
 }
 
 async function onAutofill() {
-  const autofillBtn = document.getElementById("autofill-btn");
   const autofillStatus = document.getElementById("autofill-status");
   const autofillResultEl = document.getElementById("autofill-result");
   autofillResultEl.innerHTML = "";
@@ -304,15 +308,25 @@ async function onAutofill() {
       throw new Error(profile.error || "Could not load your profile data.");
     }
 
+    // Prefer a freshly-tailored resume/cover letter generated for THIS job this session
+    // (currentGenerateResult); otherwise fall back to the active resume's raw, untailored PDF
+    // so autofill still works without running Analyze/Generate first. There's no "generic"
+    // cover letter to fall back to - it's always JD-tailored, so it's simply omitted here.
     const files = [];
-    if (currentGenerateResult.resume_filename) {
+    if (currentGenerateResult && currentGenerateResult.resume_filename) {
       files.push({
         filename: currentGenerateResult.resume_filename,
         mimeType: "application/pdf",
         bytes: await fetchFileAsArrayBuffer(currentGenerateResult.resume_filename),
       });
+    } else if (profile.resume_id) {
+      files.push({
+        filename: "resume.pdf",
+        mimeType: "application/pdf",
+        bytes: await fetchActiveResumeAsArrayBuffer(profile.resume_id),
+      });
     }
-    if (currentGenerateResult.cover_letter_filename) {
+    if (currentGenerateResult && currentGenerateResult.cover_letter_filename) {
       files.push({
         filename: currentGenerateResult.cover_letter_filename,
         mimeType: "application/pdf",
@@ -395,6 +409,8 @@ function renderAutofillResult(result) {
     });
   });
 }
+
+autofillBtn.addEventListener("click", onAutofill);
 
 checkBackend();
 loadStoredJob();

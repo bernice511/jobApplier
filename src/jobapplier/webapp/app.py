@@ -133,17 +133,23 @@ def api_autofill_profile():
     autofill feature. first_name/last_name come from screening_answers.yaml if the user set
     them there (many ATS forms split name into two fields); otherwise falls back to a naive
     split of the resume's single "name" string, which is wrong for some multi-word names but
-    better than nothing."""
-    try:
-        resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
-    except resume_store.ResumeStoreError as exc:
-        return jsonify({"error": str(exc)}), 400
+    better than nothing.
 
+    Includes "resume_id" so the extension can attach the active resume's raw PDF (via
+    GET /resume-files/<resume_id>) when autofilling WITHOUT having generated a JD-tailored
+    resume this session - autofill is available as soon as a job is detected, not gated on
+    running Analyze/Generate first."""
+    active = resume_store.get_active()
+    if active is None:
+        return jsonify({"error": "No active resume set - upload a resume on the Resume page first."}), 400
+
+    resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
     answers = screening_answers.load_screening_answers()
     name = resume.get("name") or ""
     name_parts = name.split(" ", 1)
 
     return jsonify({
+        "resume_id": active["id"],
         "name": name,
         "first_name": answers.get("first_name") or (name_parts[0] if name_parts else ""),
         "last_name": answers.get("last_name") or (name_parts[1] if len(name_parts) > 1 else ""),
