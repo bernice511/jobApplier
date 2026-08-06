@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>jobApplier</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='1.5' width='15' height='19' rx='3' fill='%23037568'/%3E%3Cpath d='M5.5 6.5h8M5.5 10h8M5.5 13.5h5' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='18' cy='18' r='5.5' fill='%23fff'/%3E%3Cpath d='M15.6 18.1l1.7 1.7 3.1-3.4' stroke='%23037568' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='1.5' width='15' height='19' rx='3' fill='%239333ea'/%3E%3Cpath d='M5.5 6.5h8M5.5 10h8M5.5 13.5h5' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='18' cy='18' r='5.5' fill='%23fff'/%3E%3Cpath d='M15.6 18.1l1.7 1.7 3.1-3.4' stroke='%239333ea' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
   <style>
     :root {
       color-scheme: light;
@@ -15,12 +15,11 @@
       --text-muted:  #898781;
       --border:      rgba(11,11,11,0.10);
       --gridline:    #e1e0d9;
-      /* Teal brand accent - same hue family as the dark-mode accent below (just a darker,
+      /* Plum brand accent - same hue family as the dark-mode accent below (just a darker,
          more saturated step for the light surface), so the brand color doesn't switch hues
-         when the theme flips. Validated: OKLCH L=0.505/C=0.090, 5.31:1 vs this page, 5.60:1
-         for white button text. */
-      --accent:      #037568;
-      --accent-wash: rgba(3,117,104,0.10);
+         when the theme flips. 5.11:1 vs this page, 5.38:1 for white button text. */
+      --accent:      #9333ea;
+      --accent-wash: rgba(147,51,234,0.10);
       --button-ink:  #ffffff;
       /* Status colors are fixed/theme-invariant by design (see dark block below) - a status
          never changes hue when the theme flips, only the surface around it does. */
@@ -37,7 +36,7 @@
     @media (prefers-color-scheme: dark) {
       :root {
         color-scheme: dark;
-        /* Teal & Ink dark palette: ultra-dark teal-black with a bright cyan/teal accent. */
+        /* Plum & Ink dark palette: ultra-dark teal-black base with a bright violet accent. */
         --page:        #0c1618;
         --surface:     #142226;
         --text-1:      #eaf4f3;
@@ -45,11 +44,11 @@
         --text-muted:  #7e9997;
         --border:      rgba(220,245,240,0.10);
         --gridline:    #203536;
-        --accent:      #2dd4bf;
-        --accent-wash: rgba(45,212,191,0.16);
-        /* This teal is bright (OKLCH L=0.785) - white text on it is only 1.86:1 (WCAG fail).
-           Dark ink gives 9.86:1, so buttons use the page color as their text instead of
-           white in dark mode specifically. */
+        --accent:      #c084fc;
+        --accent-wash: rgba(192,132,252,0.16);
+        /* This violet is bright - white text on it is only 2.64:1 (WCAG fail). Dark ink
+           gives much better contrast, so buttons use the page color as their text instead
+           of white in dark mode specifically. */
         --button-ink:  var(--page);
         --good:        #0ca30c;
         --warning:     #fab219;
