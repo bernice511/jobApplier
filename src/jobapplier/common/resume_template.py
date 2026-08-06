@@ -71,7 +71,7 @@ def render_cover_letter(cover_letter_data: dict, output_path: Path) -> Path:
     }
     """
     template = _env.get_template("cover_letter.html.jinja")
-    html_str = template.render(**cover_letter_data)
+    html_str = template.render(**cover_letter_data, style=_load_style())
     output_path.parent.mkdir(parents=True, exist_ok=True)
     HTML(string=html_str, base_url=str(TEMPLATES_DIR)).write_pdf(str(output_path))
     return output_path

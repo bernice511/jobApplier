@@ -3,16 +3,32 @@
 <head>
 <meta charset="utf-8">
 <style>
+  {# Margins/font-size/line-height stay fixed here regardless of the résumé's own density -
+     a cover letter is prose and needs its own comfortable reading layout, not the résumé's
+     tight, dense metrics. Only font FAMILY and the name/contact/text COLORS carry over, so
+     the two documents look like a matched set without the letter inheriting a cramped look
+     from a one-page résumé. #}
   @page { size: Letter; margin: 0.9in 1in; }
+  * { box-sizing: border-box; }
   body {
-    font-family: Georgia, "Times New Roman", Times, serif;
+    font-family: {{ style.body_font_family }};
     font-size: 11pt;
     line-height: 1.45;
-    color: #111;
+    color: {{ style.text_color }};
   }
   .header { margin-bottom: 18pt; }
-  .name { font-size: 15pt; font-weight: bold; }
-  .contact { font-size: 9.6pt; margin-top: 2pt; }
+  .header-with-photo { display: flex; align-items: center; gap: 12pt; margin-bottom: 18pt; }
+  .header-with-photo .header-text { flex: 1; }
+  .photo {
+    width: {{ style.photo_width_pt }}pt;
+    height: {{ style.photo_height_pt }}pt;
+    object-fit: cover;
+    border-radius: 3pt;
+    flex-shrink: 0;
+    order: {{ 2 if style.photo_side == 'right' else 0 }};
+  }
+  .name { font-size: 15pt; font-weight: bold; color: {{ style.name_color }}; }
+  .contact { font-size: 9.6pt; margin-top: 2pt; color: {{ style.contact_color }}; }
   .date { margin-bottom: 14pt; }
   .greeting { margin-bottom: 10pt; }
   p.body-para { margin: 0 0 10pt 0; text-align: justify; }
@@ -20,10 +36,20 @@
 </style>
 </head>
 <body>
+  {% if style.photo_data_uri %}
+  <div class="header-with-photo">
+    <img class="photo" src="{{ style.photo_data_uri }}" alt="">
+    <div class="header-text">
+      <div class="name">{{ name }}</div>
+      <div class="contact">{{ contact | join(' | ') }}</div>
+    </div>
+  </div>
+  {% else %}
   <div class="header">
     <div class="name">{{ name }}</div>
     <div class="contact">{{ contact | join(' | ') }}</div>
   </div>
+  {% endif %}
   <div class="date">{{ date }}</div>
   <div class="greeting">{{ greeting }}</div>
   {% for para in body_paragraphs %}
