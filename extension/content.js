@@ -201,24 +201,30 @@ const SITE_EXTRACTORS = [
 
 function extractJob() {
   const site = SITE_EXTRACTORS.find((s) => s.test(location.hostname));
-  const primary = site ? site.extract() : extractGeneric();
-  const fallback = site ? extractGeneric() : primary;
 
-  return {
-    title: primary.title || fallback.title,
-    company: primary.company || fallback.company,
-    location: primary.location || fallback.location,
-    description: primary.description || fallback.description,
-    url: location.href,
-    extractedAt: Date.now(),
-  };
+  if (site) {
+    // A site we have a dedicated extractor for is one where we know what a real job page's
+    // title signal looks like (e.g. LinkedIn's /jobs/view/ href). If that signal is missing,
+    // treat this as "not currently a job page" rather than falling back to the generic
+    // largest-text-block heuristic - LinkedIn in particular is a single-page app, so clicking
+    // through to a profile (e.g. from "People you can reach out to") can swap the visible
+    // content without a real navigation, leaving this content script running on what's now a
+    // profile page. Falling back to generic scraping there was publishing profile bios as if
+    // they were job descriptions, which then triggered a real (wasted) analyze call on
+    // garbage input - see panel.js's auto-analyze-on-detection.
+    const primary = site.extract();
+    if (!primary.title) return null;
+    return { ...primary, url: location.href, extractedAt: Date.now() };
+  }
+
+  return { ...extractGeneric(), url: location.href, extractedAt: Date.now() };
 }
 
 let lastKey = "";
 
 function maybePublish() {
   const job = extractJob();
-  if (!job.description) return; // nothing usable yet (page still loading / no job open)
+  if (!job || !job.description) return; // nothing usable yet (page still loading / no job open)
 
   const key = `${job.title}|${job.company}|${job.description.length}`;
   if (key === lastKey) return;
