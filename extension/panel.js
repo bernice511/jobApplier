@@ -124,9 +124,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// Auto-analyze-on-detection means clicking through several jobs quickly can have multiple
+// /api/analyze requests in flight at once - a SLOWER request for a job you've since clicked
+// away from can resolve AFTER a faster request for the job you're now looking at, and
+// without this guard its response would silently overwrite the correct one already on
+// screen. Each call captures its own requestId at start; only the most recent one is allowed
+// to actually render.
+let analyzeRequestId = 0;
+
 async function runAnalyze() {
   const jdText = jdTextEl.value.trim();
   if (!jdText) return;
+
+  const requestId = ++analyzeRequestId;
   analyzeResult.innerHTML = "";
   generateResult.innerHTML = "";
   analyzeBtn.disabled = true;
@@ -139,7 +149,10 @@ async function runAnalyze() {
       body: JSON.stringify({ jd_text: jdText }),
     });
     const data = await resp.json();
-    clearInterval(timer);
+    clearInterval(timer); // always stop OUR OWN timer, even if stale - otherwise a discarded
+    // request's caption-update interval keeps firing forever, fighting the current one for
+    // the same "Checking fit... Ns" text.
+    if (requestId !== analyzeRequestId) return; // a newer request has already taken over
     analyzeStatus.innerHTML = "";
 
     if (!resp.ok) {
@@ -150,10 +163,11 @@ async function runAnalyze() {
     renderAnalysis(data);
   } catch (e) {
     clearInterval(timer);
+    if (requestId !== analyzeRequestId) return;
     analyzeStatus.innerHTML = "";
     analyzeResult.innerHTML = `<div class="error-box">${e}</div>`;
   } finally {
-    analyzeBtn.disabled = false;
+    if (requestId === analyzeRequestId) analyzeBtn.disabled = false;
   }
 }
 

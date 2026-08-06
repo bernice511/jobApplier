@@ -275,19 +275,27 @@ def _compute_match_score(matched_count: int, suggested_count: int, core_requirem
     return max(0, min(10, round(coverage * 10)))
 
 
-# Every Claude call in this file (extraction, classification, AND full resume/cover-letter
-# generation) uses this minimal, purpose-built system prompt instead of the CLI's default
-# (see claude_cli.py's docstring for the ~25k-cached-token overhead this avoids on every
-# single call), but deliberately stays on the CLI's DEFAULT model rather than overriding to
-# Haiku. Measured on a real classify_batch call (9.6KB resume, 5-item batch): Haiku took
-# 27.7-62.6s and cost $0.021-0.047, while the default model (Sonnet) took 5.5-8.0s for
-# $0.035-0.041 - a smaller/cheaper-per-token model was neither faster nor actually cheaper
+# Every Claude call in this file uses a minimal, purpose-built system prompt instead of the
+# CLI's default (see claude_cli.py's docstring for the ~25k-cached-token overhead this avoids
+# on every single call), but deliberately stays on the CLI's DEFAULT model rather than
+# overriding to Haiku. Measured on a real classify_batch call (9.6KB resume, 5-item batch):
+# Haiku took 27.7-62.6s and cost $0.021-0.047, while the default model (Sonnet) took 5.5-8.0s
+# for $0.035-0.041 - a smaller/cheaper-per-token model was neither faster nor actually cheaper
 # here, because it generated far more tokens visibly struggling with the matched/
-# suggested/unmet judgment call against a multi-section resume. Not extraction/classification
-# specific wording, since the same prompt is reused for the generation calls below too -
-# the actual task framing (resume writer, truthfulness rules, etc.) lives in each call's own
-# user-turn prompt, not here.
-_JSON_SYSTEM_PROMPT = (
+# suggested/unmet judgment call against a multi-section resume.
+#
+# Two separate prompts, not one generic one: extraction/classification is a JUDGMENT task
+# (does this phrase match something in the resume, yes/no/related), while resume/cover-letter
+# generation is a WRITING task. These were briefly merged into one "JSON generation tool"
+# wording, then split back apart on a user report of match scores unreliably coming back 0 -
+# unconfirmed whether the merged wording was actually the cause (repeated backend testing
+# afterward couldn't reproduce a bad score), but reverting to task-accurate wording for the
+# judgment call specifically is a safe, no-downside precaution either way, so it stays split.
+_CLASSIFY_SYSTEM_PROMPT = (
+    "You are a JSON extraction/classification tool. Follow the user's instructions exactly "
+    "and respond with nothing but the requested JSON."
+)
+_GENERATE_SYSTEM_PROMPT = (
     "You are a JSON generation tool. Follow the user's instructions exactly and respond with "
     "nothing but the requested JSON."
 )
@@ -295,7 +303,7 @@ _JSON_SYSTEM_PROMPT = (
 
 def _extract_requirements(jd_text: str) -> dict:
     prompt = EXTRACT_REQUIREMENTS_INSTRUCTIONS.replace("{jd_text}", jd_text)
-    return call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
+    return call_claude_json(prompt, system_prompt=_CLASSIFY_SYSTEM_PROMPT)
 
 
 def _classify_batch(master_resume_json: str, batch: list[str]) -> dict:
@@ -304,7 +312,7 @@ def _classify_batch(master_resume_json: str, batch: list[str]) -> dict:
         .replace("{master_resume_json}", master_resume_json)
         .replace("{batch_json}", json.dumps(batch, indent=2))
     )
-    return call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
+    return call_claude_json(prompt, system_prompt=_CLASSIFY_SYSTEM_PROMPT)
 
 
 def _chunk(items: list, n_chunks: int) -> list[list]:
@@ -427,7 +435,7 @@ def _generate_resume(jd_text, master_resume, company, title, location, approved_
     prompt = _build_prompt(
         jd_text, master_resume, company, title, location, "resume", approved_keywords, notes
     )
-    result = call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
+    result = call_claude_json(prompt, system_prompt=_GENERATE_SYSTEM_PROMPT)
     if "resume" not in result:
         raise ValueError("Claude response missing 'resume' key")
     return result
@@ -437,7 +445,7 @@ def _generate_cover_letter(jd_text, master_resume, company, title, location, app
     prompt = _build_prompt(
         jd_text, master_resume, company, title, location, "cover_letter", approved_keywords, notes
     )
-    result = call_claude_json(prompt, system_prompt=_JSON_SYSTEM_PROMPT)
+    result = call_claude_json(prompt, system_prompt=_GENERATE_SYSTEM_PROMPT)
     if "cover_letter" not in result:
         raise ValueError("Claude response missing 'cover_letter' key")
     return result
