@@ -200,12 +200,22 @@ pages, which are checked against real markup) are a generic label-based fallback
 confirmed against a live page of each - expect to iterate here the same way the JD-scraper
 selectors below did.
 
-Supported sites: LinkedIn, Indeed, Greenhouse, Lever, and Workday. Each has its own extractor
-in `extension/content.js` (`SITE_EXTRACTORS`); anything a site-specific extractor misses (or
-any other site entirely) falls back to a generic heuristic (`extractGeneric()`) rather than
-coming back empty. Company/title/location mis-detection isn't fatal even then - the backend's
-`analyze_jd()` re-derives all three from the pasted JD text anyway, so extraction accuracy
-matters most for the description text, not those fields.
+Supported sites: LinkedIn, Indeed, Greenhouse, Lever, Workday, and ADP (`myjobs.adp.com`).
+LinkedIn/Indeed/Greenhouse/Lever/Workday each have their own extractor in
+`extension/content.js` (`SITE_EXTRACTORS`); ADP has none yet and runs entirely on the generic
+fallback (`extractGeneric()` for scraping, the generic label-walker for autofill) - same
+starting point the other four had before their selectors were confirmed against real
+markup. Anything a site-specific extractor misses (or any other, unlisted site entirely) also
+falls back to the same generic heuristic rather than coming back empty. Company/title/location
+mis-detection isn't fatal even then - the backend's `analyze_jd()` re-derives all three from
+the pasted JD text anyway, so extraction accuracy matters most for the description text, not
+those fields.
+
+If you hit a job site that isn't in this list at all (the content script never even loads
+there, so autofill's "couldn't find the application form" error is really "this domain isn't
+in `manifest.json` yet," not a form-detection failure) - add its host to both
+`host_permissions` and `content_scripts.matches` in `extension/manifest.json`, the same way
+ADP was added.
 
 Setup:
 1. Copy `data/answers/screening_answers.example.yaml` to `data/answers/screening_answers.yaml`
