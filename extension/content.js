@@ -192,26 +192,38 @@ function extractGeneric() {
 }
 
 const SITE_EXTRACTORS = [
-  { test: (host) => host.endsWith("linkedin.com"), extract: extractLinkedIn },
-  { test: (host) => host.endsWith("indeed.com"), extract: extractIndeed },
-  { test: (host) => host.includes("greenhouse.io"), extract: extractGreenhouse },
-  { test: (host) => host.includes("lever.co"), extract: extractLever },
-  { test: (host) => host.includes("myworkdayjobs.com"), extract: extractWorkday },
+  // Chrome injects content scripts based on the URL at the time of a real page load, and
+  // never re-checks that match when a single-page app changes its own URL client-side. If
+  // this script was injected while the URL matched manifest.json's pattern (a LinkedIn
+  // /jobs/... page) and the page then navigates internally to something else (a profile, the
+  // home feed, search results) WITHOUT a real reload, this script keeps running against a URL
+  // it was never meant for - Chrome won't catch that, so urlMatches() re-checks it explicitly.
+  // LinkedIn is the one site here whose manifest match is scoped to a specific path segment
+  // (/jobs/*, not the whole domain) - the other sites' matches are domain-wide, so there's no
+  // narrower in-domain navigation for them to drift into.
+  { test: (host) => host.endsWith("linkedin.com"), urlMatches: () => location.pathname.startsWith("/jobs/"), extract: extractLinkedIn },
+  { test: (host) => host.endsWith("indeed.com"), urlMatches: () => true, extract: extractIndeed },
+  { test: (host) => host.includes("greenhouse.io"), urlMatches: () => true, extract: extractGreenhouse },
+  { test: (host) => host.includes("lever.co"), urlMatches: () => true, extract: extractLever },
+  { test: (host) => host.includes("myworkdayjobs.com"), urlMatches: () => true, extract: extractWorkday },
 ];
 
 function extractJob() {
   const site = SITE_EXTRACTORS.find((s) => s.test(location.hostname));
 
   if (site) {
+    if (!site.urlMatches()) return null;
+
     // A site we have a dedicated extractor for is one where we know what a real job page's
     // title signal looks like (e.g. LinkedIn's /jobs/view/ href). If that signal is missing,
     // treat this as "not currently a job page" rather than falling back to the generic
-    // largest-text-block heuristic - LinkedIn in particular is a single-page app, so clicking
-    // through to a profile (e.g. from "People you can reach out to") can swap the visible
-    // content without a real navigation, leaving this content script running on what's now a
-    // profile page. Falling back to generic scraping there was publishing profile bios as if
-    // they were job descriptions, which then triggered a real (wasted) analyze call on
-    // garbage input - see panel.js's auto-analyze-on-detection.
+    // largest-text-block heuristic - falling back to generic scraping here was publishing
+    // profile bios (and other unrelated page text) as if they were job descriptions, which
+    // then triggered a real (wasted) analyze call on garbage input - see panel.js's
+    // auto-analyze-on-detection. Note this alone isn't sufficient on LinkedIn specifically:
+    // a "Jobs based on your preferences" widget on a profile page contains real /jobs/view/
+    // links too, so the title signal can be a false positive from that widget rather than an
+    // absence - the urlMatches() check above is what actually catches that case.
     const primary = site.extract();
     if (!primary.title) return null;
     return { ...primary, url: location.href, extractedAt: Date.now() };
