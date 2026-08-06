@@ -16,11 +16,11 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    /* Warm dark palette, matching webapp/templates/base.html.jinja's dark theme. */
-    --page: #191512; --surface: #241d17; --text-1: #f5f1ea; --text-2: #cbc0b0;
-    --text-muted: #9c9082; --border: rgba(255,244,230,0.10); --gridline: #33291f;
-    --accent: #e08a45; --accent-wash: rgba(224,138,69,0.16);
-    --good: #7bb955; --warning: #f0a839; --critical: #e2695a;
+    /* Teal & Ink dark palette, matching webapp/templates/base.html.jinja's dark theme. */
+    --page: #0c1618; --surface: #142226; --text-1: #eaf4f3; --text-2: #b7cbc9;
+    --text-muted: #7e9997; --border: rgba(220,245,240,0.10); --gridline: #203536;
+    --accent: #2dd4bf; --accent-wash: rgba(45,212,191,0.16);
+    --good: #4ade80; --warning: #f5c26b; --critical: #f27171;
   }
 }
 
