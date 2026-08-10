@@ -9,22 +9,22 @@
 // UI convenience (pre-filling the panel), not the source of truth. The one field that matters
 // for real is "description" - that's what actually gets analyzed.
 
-function firstNonEmptyText(selector) {
-  for (const el of document.querySelectorAll(selector)) {
+function firstNonEmptyText(selector, root = document) {
+  for (const el of root.querySelectorAll(selector)) {
     const text = el.innerText && el.innerText.trim();
     if (text) return text;
   }
   return "";
 }
 
-function findLargestTextBlock(minLength = 300) {
+function findLargestTextBlock(minLength = 300, root = document) {
   // Last-resort fallback for the description: the tightest container that still holds a big
   // chunk of text (i.e. stop descending once the text starts fragmenting across children -
   // that's the real content wrapper, not a pass-through div). Works reasonably well on any
   // site, which is why it's also the generic fallback below, not just a LinkedIn backstop.
   let best = null;
   let bestLen = minLength;
-  document.querySelectorAll("div, section, article").forEach((el) => {
+  root.querySelectorAll("div, section, article").forEach((el) => {
     if (el.closest("#jobapplier-ignore, [id*='jobright']")) return;
     const text = el.innerText || "";
     if (text.length <= bestLen) return;
@@ -72,14 +72,34 @@ function currentLinkedInJobId() {
 // anchor whose href carries the job id already in the URL disambiguates correctly regardless
 // of DOM order; unconfirmed against a live page, falls back to the old first-match behavior
 // if nothing carries the id (e.g. an older markup variant).
-function findLinkedInTitleText(jobId) {
+function findLinkedInTitleAnchor(jobId) {
   const anchors = Array.from(document.querySelectorAll(LINKEDIN_HREF_PATTERNS.title));
   if (jobId) {
     const scoped = anchors.find((a) => a.href.includes(`/jobs/view/${jobId}`) && a.innerText.trim());
-    if (scoped) return scoped.innerText.trim();
+    if (scoped) return scoped;
   }
-  const first = anchors.find((a) => a.innerText.trim());
-  return first ? first.innerText.trim() : "";
+  return anchors.find((a) => a.innerText.trim()) || null;
+}
+
+// The reliably-identified title anchor above is somewhere INSIDE the real detail pane - walk
+// up from it to find that pane's own container, so company/description searches below can be
+// scoped to it instead of the whole page. Without this, e.g. findLargestTextBlock() as the
+// description fallback can latch onto a sidebar container that concatenates several OTHER job
+// cards' metadata (posting age, employment type, "N alumni work here") instead of the real JD -
+// that text is long enough to clear the min-length gate, so it doesn't get caught there either.
+// Stops as soon as an ancestor contains MORE than one "/jobs/view/" link - past that point
+// we've walked out of this job's own detail pane into the shared sidebar list, which has one
+// such link per card.
+function findLinkedInDetailScope(titleAnchor) {
+  if (!titleAnchor) return null;
+  let scope = titleAnchor;
+  let node = titleAnchor;
+  for (let i = 0; i < 12 && node.parentElement; i++) {
+    node = node.parentElement;
+    if (node.querySelectorAll(LINKEDIN_HREF_PATTERNS.title).length > 1) break;
+    scope = node;
+  }
+  return scope;
 }
 
 // The description container's id/classes aren't confirmed against a live page yet - if this
@@ -138,12 +158,25 @@ function extractLinkedInLocation() {
 
 function extractLinkedIn() {
   const jobId = currentLinkedInJobId();
+  const titleAnchor = findLinkedInTitleAnchor(jobId);
+  const scope = findLinkedInDetailScope(titleAnchor);
+
+  // Scoped to the detail pane first (see findLinkedInDetailScope()) - only search the whole
+  // page if that scope exists but doesn't contain what we're after (an unconfirmed markup
+  // variant), or if there was no title anchor to scope from at all.
+  const company =
+    (scope && firstNonEmptyText(LINKEDIN_HREF_PATTERNS.company, scope)) ||
+    firstNonEmptyText(LINKEDIN_HREF_PATTERNS.company);
   const rawDescription =
-    firstNonEmptyText(LINKEDIN_DESCRIPTION_SELECTORS.join(", ")) || findLargestTextBlock();
+    (scope && firstNonEmptyText(LINKEDIN_DESCRIPTION_SELECTORS.join(", "), scope)) ||
+    firstNonEmptyText(LINKEDIN_DESCRIPTION_SELECTORS.join(", ")) ||
+    (scope && findLargestTextBlock(300, scope)) ||
+    findLargestTextBlock();
+
   return {
     id: jobId,
-    title: findLinkedInTitleText(jobId),
-    company: firstNonEmptyText(LINKEDIN_HREF_PATTERNS.company),
+    title: titleAnchor ? titleAnchor.innerText.trim() : "",
+    company,
     location: extractLinkedInLocation(),
     description: cleanLinkedInDescription(rawDescription),
   };
@@ -259,13 +292,17 @@ function extractJob() {
     // absence - the urlMatches() check above is what actually catches that case.
     const primary = site.extract();
     if (!primary.title) return null;
-    return { ...primary, url: location.href, extractedAt: Date.now() };
+    return { ...primary, url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID };
   }
 
-  return { ...extractGeneric(), url: location.href, extractedAt: Date.now() };
+  return { ...extractGeneric(), url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID };
 }
 
 let lastKey = "";
+
+// Identifies THIS content-script instance (one per frame) - used below to distinguish "a
+// different frame is racing" from "this same frame is re-extracting as the page settles."
+const FRAME_INSTANCE_ID = Math.random().toString(36).slice(2);
 
 // Real job descriptions are always far longer than this. Sites like LinkedIn render a loading
 // skeleton/placeholder in the description container for a moment before the real text streams
@@ -302,11 +339,20 @@ function maybePublish() {
     // more-likely-real description, don't let a shorter one (an ad iframe, a cookie-consent
     // widget's own frame, etc.) clobber it. A genuinely different job always overwrites - this
     // guard is only about frames racing on the SAME job.
+    //
+    // Scoped to DIFFERENT frames specifically (existing.frameId !== job.frameId), not same-frame
+    // re-extraction: on a search-results page, THIS frame's own scope-narrowing (see
+    // findLinkedInDetailScope()) can legitimately get MORE precise - and therefore shorter - as
+    // the sidebar list finishes rendering, correcting an early snapshot that accidentally walked
+    // too far up the DOM before there was more than one job card to detect the sidebar boundary.
+    // Without frameId, that correction is indistinguishable from "a shorter, less-real capture
+    // trying to clobber a longer, more-real one" and gets silently rejected forever.
     chrome.storage.local.get("jobapplier_current_job", (data) => {
       const existing = data.jobapplier_current_job;
       if (
         existing &&
         jobIdentity(existing) === jobIdentity(job) &&
+        existing.frameId !== job.frameId &&
         job.description.length < existing.description.length
       ) {
         return;

@@ -12,7 +12,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from jobapplier.common import resume_parser, resume_store, screening_answers
 from jobapplier.common.config import GENERATED_DIR, RESUME_DIR, load_config
 from jobapplier.job_alerts import store as job_alerts_store
-from jobapplier.webapp import tailoring_log, tailoring_service
+from jobapplier.webapp import review_session, tailoring_log, tailoring_service
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB - generous for a resume PDF
@@ -252,6 +252,29 @@ def api_tailor():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify(_with_filenames(record))
+
+
+@app.post("/api/review-session")
+def api_review_session_create():
+    """Called by the extension right before it opens the full-tab review page (see
+    extension/panel.js's openReviewTab()) - hands off everything that page needs to display
+    the current result and, if you leave feedback, regenerate from there."""
+    body = request.get_json(silent=True) or {}
+    token = review_session.create(body)
+    return jsonify({"token": token})
+
+
+@app.get("/api/review-session/<token>")
+def api_review_session_get(token):
+    session = review_session.get(token)
+    if session is None:
+        return jsonify({"error": "This review link has expired - go back to the extension and open it again."}), 404
+    return jsonify(session)
+
+
+@app.get("/review/<token>")
+def review_page(token):
+    return render_template("review.html.jinja", active_page="review", token=token)
 
 
 @app.post("/api/query")

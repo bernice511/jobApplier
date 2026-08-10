@@ -25,13 +25,10 @@ const PROFILE_FIELDS = [
 let currentJob = null;
 let currentAnalysis = null;
 let currentGenerateResult = null;
-
-// Bullet text -> your note on it, from clicking a line in the resume preview dialog. Keyed by
-// the bullet's own trimmed text rather than an index, so a comment survives re-rendering the
-// preview (e.g. after a regenerate) as long as that exact line is still present. Cleared when
-// switching to a genuinely different job (see showJob()'s isNewJob branch) - a comment about
-// one job's resume has nothing to say about another job's.
-let bulletComments = new Map();
+// The exact /api/tailor request body that produced currentGenerateResult - needed to open the
+// full-tab review page (see openReviewTab()) with enough context to regenerate from there.
+// Persisted alongside generateResult in the job cache so this survives a panel reload too.
+let currentGenerateRequestBody = null;
 
 function scoreColor(score) {
   if (score >= 8) return "var(--good)";
@@ -144,15 +141,26 @@ async function restoreFromJobCache(job) {
   const cached = await loadJobCacheEntry(identity);
   if (!cached || jobIdentity(currentJob) !== identity) return;
 
-  if (cached.analysis) {
+  // A cached result only means anything if it was actually computed from the description
+  // we're looking at right now. Without this check, a job cached back when content.js's
+  // scraper had a bug (e.g. capturing sidebar text instead of the real JD - see its own
+  // history for examples) would restore that same wrong score/resume forever, even after
+  // the scraper itself gets fixed and would now extract the job correctly - the stale
+  // browser-local cache entry silently outlives the bug that produced it. Comparing against
+  // the CURRENT extraction means a scraper fix (or the page just finishing loading late)
+  // naturally self-heals the next time you open the job, no manual cache-clearing needed.
+  const currentDescription = (job.description || "").trim();
+
+  if (cached.analysis && cached.analyzedDescription === currentDescription) {
     currentAnalysis = cached.analysis;
     renderAnalysis(cached.analysis);
     // Nothing changed since this was cached - skip the redundant auto-analyze the debounce
     // would otherwise still fire in the background (see scheduleAutoAnalyze()).
-    lastAutoAnalyzedDescription = jdTextEl.value.trim();
+    lastAutoAnalyzedDescription = currentDescription;
   }
-  if (cached.generateResult) {
+  if (cached.generateResult && (cached.generateRequestBody?.jd_text || "").trim() === currentDescription) {
     currentGenerateResult = cached.generateResult;
+    currentGenerateRequestBody = cached.generateRequestBody;
     renderGenerateResult(cached.generateResult);
   }
 }
@@ -181,8 +189,8 @@ function showJob(job) {
     // again for this job.
     currentAnalysis = null;
     currentGenerateResult = null;
+    currentGenerateRequestBody = null;
     lastAutoAnalyzedDescription = null;
-    bulletComments.clear();
     restoreFromJobCache(job);
   }
 
@@ -265,7 +273,7 @@ async function runAnalyze() {
     }
     currentAnalysis = data;
     renderAnalysis(data);
-    saveJobCacheEntry(jobIdentity(currentJob), { analysis: data });
+    saveJobCacheEntry(jobIdentity(currentJob), { analysis: data, analyzedDescription: jdText });
   } catch (e) {
     clearInterval(timer);
     if (requestId !== analyzeRequestId) return;
@@ -322,108 +330,33 @@ function renderAnalysis(data) {
   document.getElementById("generate-btn").addEventListener("click", onGenerate);
 }
 
-function openPreviewDialog(html) {
-  const dialog = document.getElementById("preview-dialog");
-  const content = document.getElementById("preview-dialog-content");
-  content.innerHTML = html;
-  wireResumePreviewComments(content);
-  dialog.showModal();
-  dialog.scrollTop = 0; // showModal() can otherwise land scrolled past the title/note
-}
-
-// Every <li> under a "bullets" list in resume_preview_html (see resume_preview.html.jinja) is
-// one resume bullet - clicking it opens a small note box, and the note is kept (keyed by the
-// bullet's own text) so "Regenerate with feedback" can fold every open note back into the next
-// /api/tailor call as extra guidance, the same way the free-text "anything else to emphasize"
-// box already works, just scoped to one line instead of the whole resume.
-function wireResumePreviewComments(container) {
-  container.querySelectorAll("ul.bullets li").forEach((li) => {
-    const text = li.textContent.trim();
-    if (!text) return;
-    li.classList.add("commentable-bullet");
-    if (bulletComments.has(text)) li.classList.add("has-comment");
-
-    li.addEventListener("click", (e) => {
-      if (e.target.closest(".bullet-comment-box")) return;
-      if (window.getSelection().toString()) return; // was selecting/copying text, not commenting
-      if (li.querySelector(".bullet-comment-box")) return; // already open
-      openBulletCommentBox(li, text);
-    });
+// Opens the generated resume in a full browser tab instead of a dialog inside the side panel -
+// a <dialog> here is capped by however wide the panel itself is (Chrome controls that, not
+// this CSS), which was never going to be enough room to read AND comment on individual bullets
+// comfortably. The webapp already runs on BACKEND_URL with the room a normal tab has, so the
+// review UI (bullet comments + "regenerate with feedback") lives there instead - see
+// review.html.jinja. A short-lived server-side session (POST /api/review-session) is the
+// hand-off: jd_text can be tens of KB, too big for a URL, and a plain webapp tab has no access
+// to chrome.storage to read it directly.
+async function openReviewTab() {
+  if (!currentGenerateRequestBody || !currentGenerateResult) return;
+  const resp = await fetch(`${BACKEND_URL}/api/review-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...currentGenerateRequestBody,
+      analysis: currentAnalysis,
+      generate_result: currentGenerateResult,
+    }),
   });
-  updateRegenerateButton();
-}
-
-function openBulletCommentBox(li, text) {
-  const box = document.createElement("div");
-  box.className = "bullet-comment-box";
-  const existing = bulletComments.get(text) || "";
-  box.innerHTML = `
-    <textarea class="bullet-comment-input" placeholder="e.g. make this more quantified">${existing}</textarea>
-    <div class="bullet-comment-actions">
-      <button type="button" class="secondary bullet-comment-save">Save</button>
-      ${existing ? '<button type="button" class="secondary bullet-comment-remove">Remove</button>' : ""}
-      <button type="button" class="secondary bullet-comment-cancel">Cancel</button>
-    </div>
-  `;
-  box.addEventListener("click", (e) => e.stopPropagation());
-  li.appendChild(box);
-  box.querySelector(".bullet-comment-input").focus();
-
-  box.querySelector(".bullet-comment-save").addEventListener("click", () => {
-    const value = box.querySelector(".bullet-comment-input").value.trim();
-    if (value) {
-      bulletComments.set(text, value);
-      li.classList.add("has-comment");
-    } else {
-      bulletComments.delete(text);
-      li.classList.remove("has-comment");
-    }
-    box.remove();
-    updateRegenerateButton();
-  });
-  const removeBtn = box.querySelector(".bullet-comment-remove");
-  if (removeBtn) {
-    removeBtn.addEventListener("click", () => {
-      bulletComments.delete(text);
-      li.classList.remove("has-comment");
-      box.remove();
-      updateRegenerateButton();
-    });
-  }
-  box.querySelector(".bullet-comment-cancel").addEventListener("click", () => box.remove());
-}
-
-function updateRegenerateButton() {
-  const btn = document.getElementById("preview-regenerate-btn");
-  if (bulletComments.size > 0) {
-    btn.style.display = "";
-    btn.textContent = `Regenerate with feedback (${bulletComments.size})`;
-  } else {
-    btn.style.display = "none";
-  }
-}
-
-async function regenerateWithFeedback() {
-  const notesEl = document.getElementById("notes-text");
-  const baseNotes = notesEl ? notesEl.value.trim() : "";
-  const feedbackLines = Array.from(bulletComments.entries())
-    .map(([text, comment]) => `- "${text}": ${comment}`)
-    .join("\n");
-  const combinedNotes = [
-    baseNotes,
-    feedbackLines ? `Specific feedback on these resume lines:\n${feedbackLines}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  bulletComments.clear();
-  document.getElementById("preview-dialog").close();
-  await generateTailored(combinedNotes, { autoOpenPreview: true });
+  if (!resp.ok) return;
+  const { token } = await resp.json();
+  chrome.tabs.create({ url: `${BACKEND_URL}/review/${token}` });
 }
 
 // Shared by a live /api/tailor response and by restoreFromJobCache() re-displaying a
 // previously generated result for a job you're revisiting - both need the exact same card.
-function renderGenerateResult(data, { autoOpenPreview = false } = {}) {
+function renderGenerateResult(data) {
   let downloads = "";
   if (data.resume_filename) downloads += fileLink(data.resume_filename, "Download resume");
   if (data.cover_letter_filename) downloads += fileLink(data.cover_letter_filename, "Download cover letter");
@@ -439,21 +372,18 @@ function renderGenerateResult(data, { autoOpenPreview = false } = {}) {
   }
 
   if (data.resume_preview_html) {
-    html += `<button class="secondary preview-open-btn" style="width:100%;">View resume preview</button>`;
+    html += `<button class="secondary preview-open-btn" style="width:100%;">Open full resume review &#8599;</button>`;
   }
   html += `</div>`;
 
   generateResult.innerHTML = html;
 
   if (data.resume_preview_html) {
-    generateResult.querySelector(".preview-open-btn").addEventListener("click", () => {
-      openPreviewDialog(data.resume_preview_html);
-    });
-    if (autoOpenPreview) openPreviewDialog(data.resume_preview_html);
+    generateResult.querySelector(".preview-open-btn").addEventListener("click", openReviewTab);
   }
 }
 
-async function generateTailored(notes, { autoOpenPreview = false } = {}) {
+async function generateTailored(notes) {
   const generateBtn = document.getElementById("generate-btn");
   const generateStatus = document.getElementById("generate-status");
   const generate = document.querySelector('input[name="generate"]:checked').value;
@@ -464,6 +394,19 @@ async function generateTailored(notes, { autoOpenPreview = false } = {}) {
     approvedKeywords.push(currentAnalysis.suggested_keywords[idx]);
   });
 
+  const requestBody = {
+    jd_text: jdTextEl.value,
+    company: currentAnalysis.company,
+    title: currentAnalysis.title,
+    location: currentAnalysis.location,
+    generate,
+    approved_keywords: approvedKeywords,
+    notes,
+    matched_keyword_count: (currentAnalysis.matched_keywords || []).length,
+    suggested_keyword_count: (currentAnalysis.suggested_keywords || []).length,
+    core_requirement_count: currentAnalysis.core_requirement_count || 0,
+  };
+
   generateResult.innerHTML = "";
   generateBtn.disabled = true;
   const timer = startLoading(generateStatus, "Generating via Claude...");
@@ -472,18 +415,7 @@ async function generateTailored(notes, { autoOpenPreview = false } = {}) {
     const resp = await fetch(`${BACKEND_URL}/api/tailor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jd_text: jdTextEl.value,
-        company: currentAnalysis.company,
-        title: currentAnalysis.title,
-        location: currentAnalysis.location,
-        generate,
-        approved_keywords: approvedKeywords,
-        notes,
-        matched_keyword_count: (currentAnalysis.matched_keywords || []).length,
-        suggested_keyword_count: (currentAnalysis.suggested_keywords || []).length,
-        core_requirement_count: currentAnalysis.core_requirement_count || 0,
-      }),
+      body: JSON.stringify(requestBody),
     });
     const data = await resp.json();
     clearInterval(timer);
@@ -495,8 +427,9 @@ async function generateTailored(notes, { autoOpenPreview = false } = {}) {
     }
 
     currentGenerateResult = data;
-    renderGenerateResult(data, { autoOpenPreview });
-    saveJobCacheEntry(jobIdentity(currentJob), { generateResult: data });
+    currentGenerateRequestBody = requestBody;
+    renderGenerateResult(data);
+    saveJobCacheEntry(jobIdentity(currentJob), { generateResult: data, generateRequestBody: requestBody });
   } catch (e) {
     clearInterval(timer);
     if (generateStatus) generateStatus.innerHTML = "";
@@ -510,8 +443,6 @@ async function onGenerate() {
   const notes = document.getElementById("notes-text").value;
   await generateTailored(notes);
 }
-
-document.getElementById("preview-regenerate-btn").addEventListener("click", regenerateWithFeedback);
 
 async function fetchFileAsArrayBuffer(filename) {
   const resp = await fetch(`${BACKEND_URL}/files/${encodeURIComponent(filename)}`);
@@ -719,13 +650,6 @@ profileCloseBtn.addEventListener("click", () => profileDialog.close());
 // <dialog> only closes via .close()/Escape by default, not a backdrop click.
 profileDialog.addEventListener("click", (e) => {
   if (e.target === profileDialog) profileDialog.close();
-});
-
-const previewDialog = document.getElementById("preview-dialog");
-const previewCloseBtn = document.getElementById("preview-close-btn");
-previewCloseBtn.addEventListener("click", () => previewDialog.close());
-previewDialog.addEventListener("click", (e) => {
-  if (e.target === previewDialog) previewDialog.close();
 });
 
 profileSaveBtn.addEventListener("click", async () => {

@@ -118,3 +118,50 @@ def diff_resume(master_resume: dict, tailored_resume: dict) -> dict:
             highlighted_sections.append({**section, "entries": highlighted_entries})
 
     return {**tailored_resume, "sections": highlighted_sections}
+
+
+def summarize_changes(master_resume: dict, highlighted_resume: dict) -> list[str]:
+    """Derives a short "what changed" summary directly from diff_resume()'s output, instead
+    of also asking Claude to narrate it in prose - the diff already knows exactly which
+    bullets/summary changed, so a separate LLM-written description would just spend output
+    tokens restating data this module already has. Skills sections aren't word-diffed (see
+    diff_resume() above - they pass through untouched), so those are compared directly
+    against master_resume's items instead."""
+    master_skills_by_category: dict[str, set[str]] = {
+        cat["name"]: set(cat["items"])
+        for section in master_resume.get("sections", [])
+        if section["type"] == "skills"
+        for cat in section["categories"]
+    }
+
+    def bullets_changed(bullets: list[dict]) -> int:
+        return sum(1 for b in bullets if any(seg["changed"] for seg in b["segments"]))
+
+    lines: list[str] = []
+    for section in highlighted_resume.get("sections", []):
+        if section["type"] == "paragraph":
+            if any(seg["changed"] for seg in section["content"]["segments"]):
+                lines.append(f'Updated the "{section["title"]}" section')
+
+        elif section["type"] == "skills":
+            for cat in section["categories"]:
+                added = [
+                    item for item in cat["items"]
+                    if item not in master_skills_by_category.get(cat["name"], set())
+                ]
+                if added:
+                    lines.append(f'Added {", ".join(added)} to "{cat["name"]}"')
+
+        elif section["type"] == "entries":
+            for entry in section["entries"]:
+                count = bullets_changed(entry.get("bullets", []))
+                if count:
+                    noun = "bullet" if count == 1 else "bullets"
+                    lines.append(f'Reworded {count} {noun} in {entry["header_left_bold"]}')
+                for sub in entry.get("subentries", []):
+                    sub_count = bullets_changed(sub.get("bullets", []))
+                    if sub_count:
+                        noun = "bullet" if sub_count == 1 else "bullets"
+                        lines.append(f'Reworded {sub_count} {noun} in {sub["header_left_bold"]}')
+
+    return lines

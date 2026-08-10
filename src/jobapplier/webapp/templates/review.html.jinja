@@ -1,0 +1,249 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<div id="review-loading" class="loading-box"><div class="spinner-lg"></div><div>Loading...</div></div>
+<div id="review-error"></div>
+
+<div class="review-layout" id="review-layout" style="display:none;">
+  <div class="review-side card">
+    <div class="result-title" id="review-title"></div>
+    <div class="sub" id="review-sub"></div>
+    <div id="review-score"></div>
+    <div id="review-matched"></div>
+    <div id="review-changes"></div>
+    <div class="downloads" id="review-downloads"></div>
+
+    <div class="changes-title">Anything else to emphasize? (optional)</div>
+    <textarea id="review-notes" style="min-height:70px;" placeholder="e.g. I also have hands-on experience with..."></textarea>
+    <button class="primary" id="review-regenerate-btn">Regenerate</button>
+    <div id="review-regenerate-status"></div>
+  </div>
+
+  <div class="review-main card">
+    <p class="preview-note">Highlighted = reworded from your master resume, dimmed = unchanged (preview only, the downloaded PDF is clean). Click any bullet to leave a note on it, then hit Regenerate to fold it in.</p>
+    <div id="review-preview-content" class="preview-box"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* base.html.jinja caps .main at 900px, which reads fine for the single-column forms every
+     other page uses but starves this page's two-column layout of the room the whole point of
+     a full-tab review (instead of the old side-panel dialog) was supposed to buy back. Later
+     in source order than base's own <style>, so it wins the cascade at equal specificity
+     without needing a hook in base.html.jinja for "this page wants to be wider." */
+  .main { max-width: 1500px; }
+
+  .review-layout { display: flex; align-items: flex-start; gap: 1rem; }
+  .review-side { flex: 0 0 340px; }
+  .review-main { flex: 1; min-width: 0; }
+  .review-side textarea { margin-top: 0.4rem; }
+  .review-side button.primary { margin-top: 0.7rem; }
+
+  /* Per-bullet comment affordance in the resume preview - added by this page's own JS after
+     resume_preview_html is injected, not part of that template itself. */
+  .commentable-bullet { cursor: pointer; border-radius: 4px; padding: 1px 4px; margin: 0 -4px; transition: background 0.1s; }
+  .commentable-bullet:hover { background: var(--accent-wash); }
+  .commentable-bullet.has-comment { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+  .bullet-comment-box {
+    cursor: default; margin: 0.4rem 0 0.6rem; padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--page);
+  }
+  .bullet-comment-input {
+    width: 100%; min-height: 55px; font-family: inherit; font-size: 0.85rem; color: var(--text-1);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.6rem;
+    resize: vertical;
+  }
+  .bullet-comment-actions { display: flex; gap: 0.45rem; margin-top: 0.45rem; }
+  .bullet-comment-actions button { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
+
+  @media (max-width: 860px) {
+    .review-layout { flex-direction: column; }
+    .review-side { flex-basis: auto; width: 100%; }
+  }
+</style>
+<script>
+  const TOKEN = {{ token | tojson }};
+
+  let session = null;
+  const bulletComments = new Map();
+
+  async function loadSession() {
+    try {
+      const resp = await fetch(`/api/review-session/${TOKEN}`);
+      const data = await resp.json();
+      document.getElementById('review-loading').style.display = 'none';
+      if (!resp.ok) {
+        document.getElementById('review-error').innerHTML = `<div class="error-box">${data.error}</div>`;
+        return;
+      }
+      session = data;
+      document.getElementById('review-layout').style.display = '';
+      renderSession();
+    } catch (e) {
+      document.getElementById('review-loading').style.display = 'none';
+      document.getElementById('review-error').innerHTML = `<div class="error-box">${e}</div>`;
+    }
+  }
+
+  function renderSession() {
+    const r = session.generate_result;
+    const a = session.analysis || {};
+
+    document.getElementById('review-title').textContent = `${session.title} @ ${session.company}`;
+    document.getElementById('review-sub').textContent = session.location || '';
+    document.getElementById('review-score').innerHTML = statTileHtml(r.match_score);
+
+    const matchedEl = document.getElementById('review-matched');
+    if (a.matched_keywords && a.matched_keywords.length) {
+      matchedEl.innerHTML = `<div class="changes-title">Already matches</div><div class="chip-row">${
+        a.matched_keywords.map((k) => `<span class="chip">${k}</span>`).join('')
+      }</div>`;
+    } else {
+      matchedEl.innerHTML = '';
+    }
+
+    const changesEl = document.getElementById('review-changes');
+    if (r.changes && r.changes.length) {
+      changesEl.innerHTML = `<div class="changes-title">What changed</div><ul class="changes-list">${
+        r.changes.map((c) => `<li>${c}</li>`).join('')
+      }</ul>`;
+    } else {
+      changesEl.innerHTML = '';
+    }
+
+    let downloads = '';
+    if (r.resume_filename) downloads += fileLink(r.resume_filename, 'Download resume');
+    if (r.cover_letter_filename) downloads += fileLink(r.cover_letter_filename, 'Download cover letter');
+    document.getElementById('review-downloads').innerHTML = downloads;
+
+    const previewContent = document.getElementById('review-preview-content');
+    previewContent.innerHTML = r.resume_preview_html || '';
+    bulletComments.clear();
+    wireBulletComments(previewContent);
+    updateRegenerateButton();
+  }
+
+  function wireBulletComments(container) {
+    // Any bullet OR paragraph that went through the segs() macro (see resume_preview.html.jinja)
+    // has at least one .changed/.unchanged span inside it - that's what makes something
+    // commentable here, not the tag name. Bullets aren't the only thing that gets reworded:
+    // the Profile/Summary section is a plain <p> with the same segs() markup, and without this
+    // check it had no comment affordance at all. Skills lines (a plain <p><strong>...) never
+    // go through segs() - they're not diffed - so this naturally leaves them alone too.
+    container.querySelectorAll('.resume-preview p, .resume-preview li').forEach((el) => {
+      if (!el.querySelector('.changed, .unchanged')) return;
+      const text = el.textContent.trim();
+      if (!text) return;
+      el.classList.add('commentable-bullet');
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.bullet-comment-box')) return;
+        if (window.getSelection().toString()) return; // was selecting/copying text, not commenting
+        if (el.querySelector('.bullet-comment-box')) return; // already open
+        openBulletCommentBox(el, text);
+      });
+    });
+  }
+
+  function openBulletCommentBox(el, text) {
+    const box = document.createElement('div');
+    box.className = 'bullet-comment-box';
+    const existing = bulletComments.get(text) || '';
+    box.innerHTML = `
+      <textarea class="bullet-comment-input" placeholder="e.g. make this more quantified">${existing}</textarea>
+      <div class="bullet-comment-actions">
+        <button type="button" class="secondary bullet-comment-save">Save</button>
+        ${existing ? '<button type="button" class="secondary bullet-comment-remove">Remove</button>' : ''}
+        <button type="button" class="secondary bullet-comment-cancel">Cancel</button>
+      </div>
+    `;
+    box.addEventListener('click', (e) => e.stopPropagation());
+    el.appendChild(box);
+    box.querySelector('.bullet-comment-input').focus();
+
+    box.querySelector('.bullet-comment-save').addEventListener('click', () => {
+      const value = box.querySelector('.bullet-comment-input').value.trim();
+      if (value) {
+        bulletComments.set(text, value);
+        el.classList.add('has-comment');
+      } else {
+        bulletComments.delete(text);
+        el.classList.remove('has-comment');
+      }
+      box.remove();
+      updateRegenerateButton();
+    });
+    const removeBtn = box.querySelector('.bullet-comment-remove');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        bulletComments.delete(text);
+        el.classList.remove('has-comment');
+        box.remove();
+        updateRegenerateButton();
+      });
+    }
+    box.querySelector('.bullet-comment-cancel').addEventListener('click', () => box.remove());
+  }
+
+  function updateRegenerateButton() {
+    const btn = document.getElementById('review-regenerate-btn');
+    btn.textContent = bulletComments.size > 0 ? `Regenerate (${bulletComments.size} note${bulletComments.size === 1 ? '' : 's'})` : 'Regenerate';
+  }
+
+  async function onRegenerate() {
+    const btn = document.getElementById('review-regenerate-btn');
+    const statusEl = document.getElementById('review-regenerate-status');
+    const baseNotes = document.getElementById('review-notes').value.trim();
+    const feedbackLines = Array.from(bulletComments.entries())
+      .map(([text, comment]) => `- "${text}": ${comment}`)
+      .join('\n');
+    const notes = [
+      baseNotes,
+      feedbackLines ? `Specific feedback on these resume lines:\n${feedbackLines}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    btn.disabled = true;
+    const timer = startLoading(statusEl, 'Regenerating via Claude...');
+
+    try {
+      const resp = await fetch('/api/tailor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jd_text: session.jd_text,
+          company: session.company,
+          title: session.title,
+          location: session.location,
+          generate: session.generate,
+          approved_keywords: session.approved_keywords,
+          notes,
+          matched_keyword_count: session.matched_keyword_count,
+          suggested_keyword_count: session.suggested_keyword_count,
+          core_requirement_count: session.core_requirement_count,
+        }),
+      });
+      const data = await resp.json();
+      clearInterval(timer);
+      statusEl.innerHTML = '';
+
+      if (!resp.ok) {
+        statusEl.innerHTML = `<div class="error-box">${data.error || 'Something went wrong.'}</div>`;
+        return;
+      }
+
+      session.generate_result = data;
+      document.getElementById('review-notes').value = '';
+      renderSession();
+    } catch (e) {
+      clearInterval(timer);
+      statusEl.innerHTML = `<div class="error-box">${e}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('review-regenerate-btn').addEventListener('click', onRegenerate);
+  loadSession();
+</script>
+{% endblock %}

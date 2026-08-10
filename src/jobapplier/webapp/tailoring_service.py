@@ -221,10 +221,6 @@ ATS and for human recruiters:
   keep entries (companies/projects) within each section in the same order.
 - Carry "tagline" through unchanged if present. Never repeat its text inside a section's
   content, even if a section's paragraph happens to start with the same words.
-
-"changes" must be a list of 3-8 short strings, each describing one concrete edit you
-actually made and why. Do not list vague statements like "improved overall quality" - be
-specific about what moved or was reworded.
 """
 
 COVER_LETTER_BLOCK = """
@@ -395,7 +391,7 @@ def _build_prompt(
     notes: str,
 ) -> str:
     if kind == "resume":
-        keys = ["resume", "changes"]
+        keys = ["resume"]
         task_sentence = "Tailor a candidate's resume for the job described below."
         body = RESUME_BLOCK
     else:
@@ -542,7 +538,7 @@ def tailor_from_jd(
         record["resume_path"] = str(resume_pdf)
 
         highlighted_resume = resume_diff.diff_resume(master_resume, resume_result["resume"])
-        extra["changes"] = resume_result.get("changes", [])
+        extra["changes"] = resume_diff.summarize_changes(master_resume, highlighted_resume)
         extra["resume_preview_html"] = render_resume_preview_html(highlighted_resume)
 
     if cover_result:
