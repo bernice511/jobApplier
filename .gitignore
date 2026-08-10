@@ -13,6 +13,7 @@ data/resume/master_resume_photo.png
 data/resume/resumes.json
 data/resume/*/
 data/analyze_cache.json
+data/tailor_cache.json
 data/job_alerts.json
 data/logs/
 data/answers/screening_answers.yaml

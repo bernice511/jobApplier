@@ -51,6 +51,37 @@ const LINKEDIN_HREF_PATTERNS = {
   company: "a[href*='linkedin.com/company/']",
 };
 
+// LinkedIn's job search-results page keeps one stable path across every job you click on
+// (/jobs/search-results/) and only changes a "currentJobId" query param - alongside other,
+// more volatile tracking params in the same query string (analytics tokens etc. that can
+// change even when you haven't clicked a different job). So the job's true identity is this
+// id, not the URL as a whole. Used below for two things: (1) disambiguating the title link
+// from same-page sidebar list items that share the exact same href pattern, and (2) giving
+// maybePublish()/panel.js's change-detection something stable to key on.
+function currentLinkedInJobId() {
+  const fromQuery = new URLSearchParams(location.search).get("currentJobId");
+  if (fromQuery) return fromQuery;
+  const pathMatch = location.pathname.match(/\/jobs\/view\/(\d+)/);
+  return pathMatch ? pathMatch[1] : null;
+}
+
+// On a search-results page, the sidebar job list contains one "/jobs/view/<id>" link per
+// card, in addition to the detail pane's own link to whichever job is currently open - a bare
+// "first match on the page" query easily locks onto the first list item and never updates as
+// you click through different jobs, since the list itself doesn't reorder. Preferring the
+// anchor whose href carries the job id already in the URL disambiguates correctly regardless
+// of DOM order; unconfirmed against a live page, falls back to the old first-match behavior
+// if nothing carries the id (e.g. an older markup variant).
+function findLinkedInTitleText(jobId) {
+  const anchors = Array.from(document.querySelectorAll(LINKEDIN_HREF_PATTERNS.title));
+  if (jobId) {
+    const scoped = anchors.find((a) => a.href.includes(`/jobs/view/${jobId}`) && a.innerText.trim());
+    if (scoped) return scoped.innerText.trim();
+  }
+  const first = anchors.find((a) => a.innerText.trim());
+  return first ? first.innerText.trim() : "";
+}
+
 // The description container's id/classes aren't confirmed against a live page yet - if this
 // stops matching, findLargestTextBlock() below is the fallback.
 const LINKEDIN_DESCRIPTION_SELECTORS = ["#job-details", "article"];
@@ -106,10 +137,12 @@ function extractLinkedInLocation() {
 }
 
 function extractLinkedIn() {
+  const jobId = currentLinkedInJobId();
   const rawDescription =
     firstNonEmptyText(LINKEDIN_DESCRIPTION_SELECTORS.join(", ")) || findLargestTextBlock();
   return {
-    title: firstNonEmptyText(LINKEDIN_HREF_PATTERNS.title),
+    id: jobId,
+    title: findLinkedInTitleText(jobId),
     company: firstNonEmptyText(LINKEDIN_HREF_PATTERNS.company),
     location: extractLinkedInLocation(),
     description: cleanLinkedInDescription(rawDescription),
@@ -234,11 +267,30 @@ function extractJob() {
 
 let lastKey = "";
 
+// Real job descriptions are always far longer than this. Sites like LinkedIn render a loading
+// skeleton/placeholder in the description container for a moment before the real text streams
+// in - that placeholder is non-empty, so it used to pass the bare "!job.description" check
+// below and get published immediately. panel.js's auto-analyze would then run against that
+// placeholder (producing a 0 score with no detected title/company), and once the real
+// description arrived seconds later, nothing re-triggered analysis for it since panel.js's
+// isNewJob check only looks at title/company, not description length - the score stayed wrong
+// until something reset the panel's state. Waiting for a real-length description avoids the
+// race instead of trying to recover from it after the fact.
+const MIN_DESCRIPTION_LENGTH = 150;
+
+// Which job this is, for both the dedup key below and panel.js's "is this a new job" check.
+// Prefers job.id (LinkedIn's currentLinkedInJobId(), immune to the sidebar-list title/company
+// mismatch AND to volatile tracking params elsewhere in the URL) and falls back to the full
+// url for every other site, where the path alone is already a distinct-per-job signal.
+function jobIdentity(job) {
+  return job.id || job.url;
+}
+
 function maybePublish() {
   const job = extractJob();
-  if (!job || !job.description) return; // nothing usable yet (page still loading / no job open)
+  if (!job || !job.description || job.description.length < MIN_DESCRIPTION_LENGTH) return; // nothing usable yet (page still loading / no job open)
 
-  const key = `${job.title}|${job.company}|${job.description.length}`;
+  const key = `${jobIdentity(job)}|${job.description.length}`;
   if (key === lastKey) return;
   lastKey = key;
 
@@ -248,13 +300,13 @@ function maybePublish() {
     // actually reachable at all). That means multiple frames of the SAME page can each try to
     // publish independently - if another frame of this exact page already found a longer,
     // more-likely-real description, don't let a shorter one (an ad iframe, a cookie-consent
-    // widget's own frame, etc.) clobber it. A genuinely different page/job (different url)
-    // always overwrites - this guard is only about frames racing on the SAME page.
+    // widget's own frame, etc.) clobber it. A genuinely different job always overwrites - this
+    // guard is only about frames racing on the SAME job.
     chrome.storage.local.get("jobapplier_current_job", (data) => {
       const existing = data.jobapplier_current_job;
       if (
         existing &&
-        existing.url === job.url &&
+        jobIdentity(existing) === jobIdentity(job) &&
         job.description.length < existing.description.length
       ) {
         return;

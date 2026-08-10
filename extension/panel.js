@@ -26,6 +26,13 @@ let currentJob = null;
 let currentAnalysis = null;
 let currentGenerateResult = null;
 
+// Bullet text -> your note on it, from clicking a line in the resume preview dialog. Keyed by
+// the bullet's own trimmed text rather than an index, so a comment survives re-rendering the
+// preview (e.g. after a regenerate) as long as that exact line is still present. Cleared when
+// switching to a genuinely different job (see showJob()'s isNewJob branch) - a comment about
+// one job's resume has nothing to say about another job's.
+let bulletComments = new Map();
+
 function scoreColor(score) {
   if (score >= 8) return "var(--good)";
   if (score >= 6) return "var(--warning)";
@@ -82,13 +89,81 @@ async function checkBackend() {
   }
 }
 
+// Mirrors content.js's jobIdentity() - job.id (LinkedIn's stable job id) when present,
+// otherwise the page url. NOT title/company: on a LinkedIn search-results page the sidebar
+// list can make title/company extraction latch onto the wrong job (see content.js), so
+// comparing those strings here would silently mask a real job switch - the panel would keep
+// showing the previous job's analysis until a full page reload reset everything.
+function jobIdentity(job) {
+  return job && (job.id || job.url);
+}
+
+// Persists analysis + generated-resume results per job (chrome.storage.local, so it survives
+// closing/reopening the panel and even a browser restart) - so revisiting a job you've already
+// analyzed/generated for shows everything immediately, instead of waiting on a fresh
+// /api/analyze round-trip or, worse, needing another click on Generate. The backend already
+// caches both of those calls (analyze_cache.py, tailor_cache.py), so a miss here still avoids
+// re-running Claude - this layer is what avoids the round-trip entirely and the resulting flash
+// of empty state on every revisit.
+const JOB_CACHE_STORAGE_KEY = "jobapplier_job_cache";
+const MAX_CACHED_JOBS = 100;
+
+function loadJobCacheEntry(identity) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(JOB_CACHE_STORAGE_KEY, (data) => {
+      const cache = data[JOB_CACHE_STORAGE_KEY] || {};
+      resolve(cache[identity] || null);
+    });
+  });
+}
+
+function saveJobCacheEntry(identity, partial) {
+  if (!identity) return;
+  chrome.storage.local.get(JOB_CACHE_STORAGE_KEY, (data) => {
+    const cache = data[JOB_CACHE_STORAGE_KEY] || {};
+    cache[identity] = { ...cache[identity], ...partial, savedAt: Date.now() };
+
+    const entries = Object.entries(cache);
+    if (entries.length > MAX_CACHED_JOBS) {
+      entries.sort((a, b) => (a[1].savedAt || 0) - (b[1].savedAt || 0));
+      chrome.storage.local.set({
+        [JOB_CACHE_STORAGE_KEY]: Object.fromEntries(entries.slice(entries.length - MAX_CACHED_JOBS)),
+      });
+      return;
+    }
+    chrome.storage.local.set({ [JOB_CACHE_STORAGE_KEY]: cache });
+  });
+}
+
+// Fire-and-forget: by the time the async storage lookup resolves, the user may already have
+// clicked through to a DIFFERENT job (or back to this one, re-triggering isNewJob) - the
+// jobIdentity(currentJob) check re-confirms this restore is still relevant before touching the
+// UI, same guard shape as runAnalyze()'s requestId check.
+async function restoreFromJobCache(job) {
+  const identity = jobIdentity(job);
+  const cached = await loadJobCacheEntry(identity);
+  if (!cached || jobIdentity(currentJob) !== identity) return;
+
+  if (cached.analysis) {
+    currentAnalysis = cached.analysis;
+    renderAnalysis(cached.analysis);
+    // Nothing changed since this was cached - skip the redundant auto-analyze the debounce
+    // would otherwise still fire in the background (see scheduleAutoAnalyze()).
+    lastAutoAnalyzedDescription = jdTextEl.value.trim();
+  }
+  if (cached.generateResult) {
+    currentGenerateResult = cached.generateResult;
+    renderGenerateResult(cached.generateResult);
+  }
+}
+
 function showJob(job) {
   // content.js can republish the *same* job (e.g. a spurious re-extraction triggered by a
   // DOM mutation when DevTools opens/closes and resizes the page) - only treat it as a new
-  // job, and clear any in-progress analysis/results, if the title or company actually
-  // changed. Otherwise this would wipe your analyze/generate results just from LinkedIn's
-  // page reflowing, with nothing the user did actually changing.
-  const isNewJob = !currentJob || currentJob.title !== job.title || currentJob.company !== job.company;
+  // job, and clear any in-progress analysis/results, if it's actually a different job.
+  // Otherwise this would wipe your analyze/generate results just from LinkedIn's page
+  // reflowing, with nothing the user did actually changing.
+  const isNewJob = !currentJob || jobIdentity(currentJob) !== jobIdentity(job);
 
   currentJob = job;
   detectedStatus.style.display = "none";
@@ -104,12 +179,21 @@ function showJob(job) {
     // A freshly-tailored resume/cover letter belongs to the PREVIOUS job - don't attach it to
     // this new one. Autofill falls back to the active resume's raw PDF until Generate is run
     // again for this job.
+    currentAnalysis = null;
     currentGenerateResult = null;
-    // Analyze automatically instead of waiting for a click - analyze_jd() is cached
-    // server-side (see analyze_cache.py), so re-opening a job already analyzed against the
-    // same resume returns instantly rather than re-running the pipeline.
-    runAnalyze();
+    lastAutoAnalyzedDescription = null;
+    bulletComments.clear();
+    restoreFromJobCache(job);
   }
+
+  // Analyze automatically instead of waiting for a click - analyze_jd() is cached server-side
+  // (see analyze_cache.py), so re-opening a job already analyzed against the same resume
+  // returns instantly rather than re-running the pipeline. Debounced rather than firing on
+  // every publish: long job descriptions stream in over multiple DOM mutations, and this can
+  // get called again for the SAME job (title/company unchanged) as the description grows -
+  // firing immediately on the first, still-partial snapshot would analyze incomplete text and
+  // never get a second chance once the full text settles.
+  scheduleAutoAnalyze();
 }
 
 function loadStoredJob() {
@@ -131,6 +215,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // screen. Each call captures its own requestId at start; only the most recent one is allowed
 // to actually render.
 let analyzeRequestId = 0;
+
+// Waits for the description to stop changing before analyzing it, rather than firing on every
+// publish - see the comment at the scheduleAutoAnalyze() call site in showJob() for why.
+let autoAnalyzeTimer = null;
+let lastAutoAnalyzedDescription = null;
+
+function scheduleAutoAnalyze() {
+  const description = jdTextEl.value.trim();
+  if (!description) return;
+  clearTimeout(autoAnalyzeTimer);
+  autoAnalyzeTimer = setTimeout(() => {
+    // Bail if the text moved again since this timer was scheduled (a newer call already
+    // superseded it - clearTimeout above should have caught that, this is just a backstop) or
+    // if we've already analyzed this exact text (e.g. re-opening the same still-cached job).
+    const current = jdTextEl.value.trim();
+    if (current !== description || current === lastAutoAnalyzedDescription) return;
+    lastAutoAnalyzedDescription = current;
+    runAnalyze();
+  }, 1000);
+}
 
 async function runAnalyze() {
   const jdText = jdTextEl.value.trim();
@@ -161,6 +265,7 @@ async function runAnalyze() {
     }
     currentAnalysis = data;
     renderAnalysis(data);
+    saveJobCacheEntry(jobIdentity(currentJob), { analysis: data });
   } catch (e) {
     clearInterval(timer);
     if (requestId !== analyzeRequestId) return;
@@ -217,11 +322,141 @@ function renderAnalysis(data) {
   document.getElementById("generate-btn").addEventListener("click", onGenerate);
 }
 
-async function onGenerate() {
+function openPreviewDialog(html) {
+  const dialog = document.getElementById("preview-dialog");
+  const content = document.getElementById("preview-dialog-content");
+  content.innerHTML = html;
+  wireResumePreviewComments(content);
+  dialog.showModal();
+  dialog.scrollTop = 0; // showModal() can otherwise land scrolled past the title/note
+}
+
+// Every <li> under a "bullets" list in resume_preview_html (see resume_preview.html.jinja) is
+// one resume bullet - clicking it opens a small note box, and the note is kept (keyed by the
+// bullet's own text) so "Regenerate with feedback" can fold every open note back into the next
+// /api/tailor call as extra guidance, the same way the free-text "anything else to emphasize"
+// box already works, just scoped to one line instead of the whole resume.
+function wireResumePreviewComments(container) {
+  container.querySelectorAll("ul.bullets li").forEach((li) => {
+    const text = li.textContent.trim();
+    if (!text) return;
+    li.classList.add("commentable-bullet");
+    if (bulletComments.has(text)) li.classList.add("has-comment");
+
+    li.addEventListener("click", (e) => {
+      if (e.target.closest(".bullet-comment-box")) return;
+      if (window.getSelection().toString()) return; // was selecting/copying text, not commenting
+      if (li.querySelector(".bullet-comment-box")) return; // already open
+      openBulletCommentBox(li, text);
+    });
+  });
+  updateRegenerateButton();
+}
+
+function openBulletCommentBox(li, text) {
+  const box = document.createElement("div");
+  box.className = "bullet-comment-box";
+  const existing = bulletComments.get(text) || "";
+  box.innerHTML = `
+    <textarea class="bullet-comment-input" placeholder="e.g. make this more quantified">${existing}</textarea>
+    <div class="bullet-comment-actions">
+      <button type="button" class="secondary bullet-comment-save">Save</button>
+      ${existing ? '<button type="button" class="secondary bullet-comment-remove">Remove</button>' : ""}
+      <button type="button" class="secondary bullet-comment-cancel">Cancel</button>
+    </div>
+  `;
+  box.addEventListener("click", (e) => e.stopPropagation());
+  li.appendChild(box);
+  box.querySelector(".bullet-comment-input").focus();
+
+  box.querySelector(".bullet-comment-save").addEventListener("click", () => {
+    const value = box.querySelector(".bullet-comment-input").value.trim();
+    if (value) {
+      bulletComments.set(text, value);
+      li.classList.add("has-comment");
+    } else {
+      bulletComments.delete(text);
+      li.classList.remove("has-comment");
+    }
+    box.remove();
+    updateRegenerateButton();
+  });
+  const removeBtn = box.querySelector(".bullet-comment-remove");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      bulletComments.delete(text);
+      li.classList.remove("has-comment");
+      box.remove();
+      updateRegenerateButton();
+    });
+  }
+  box.querySelector(".bullet-comment-cancel").addEventListener("click", () => box.remove());
+}
+
+function updateRegenerateButton() {
+  const btn = document.getElementById("preview-regenerate-btn");
+  if (bulletComments.size > 0) {
+    btn.style.display = "";
+    btn.textContent = `Regenerate with feedback (${bulletComments.size})`;
+  } else {
+    btn.style.display = "none";
+  }
+}
+
+async function regenerateWithFeedback() {
+  const notesEl = document.getElementById("notes-text");
+  const baseNotes = notesEl ? notesEl.value.trim() : "";
+  const feedbackLines = Array.from(bulletComments.entries())
+    .map(([text, comment]) => `- "${text}": ${comment}`)
+    .join("\n");
+  const combinedNotes = [
+    baseNotes,
+    feedbackLines ? `Specific feedback on these resume lines:\n${feedbackLines}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  bulletComments.clear();
+  document.getElementById("preview-dialog").close();
+  await generateTailored(combinedNotes, { autoOpenPreview: true });
+}
+
+// Shared by a live /api/tailor response and by restoreFromJobCache() re-displaying a
+// previously generated result for a job you're revisiting - both need the exact same card.
+function renderGenerateResult(data, { autoOpenPreview = false } = {}) {
+  let downloads = "";
+  if (data.resume_filename) downloads += fileLink(data.resume_filename, "Download resume");
+  if (data.cover_letter_filename) downloads += fileLink(data.cover_letter_filename, "Download cover letter");
+
+  let html = `<div class="card">`;
+  html += `<div class="downloads">${downloads}</div>`;
+  html += statTileHtml(data.match_score);
+
+  if (data.changes && data.changes.length) {
+    html += `<div class="changes-title">What changed</div><ul class="changes-list">`;
+    data.changes.forEach((c) => { html += `<li>${c}</li>`; });
+    html += `</ul>`;
+  }
+
+  if (data.resume_preview_html) {
+    html += `<button class="secondary preview-open-btn" style="width:100%;">View resume preview</button>`;
+  }
+  html += `</div>`;
+
+  generateResult.innerHTML = html;
+
+  if (data.resume_preview_html) {
+    generateResult.querySelector(".preview-open-btn").addEventListener("click", () => {
+      openPreviewDialog(data.resume_preview_html);
+    });
+    if (autoOpenPreview) openPreviewDialog(data.resume_preview_html);
+  }
+}
+
+async function generateTailored(notes, { autoOpenPreview = false } = {}) {
   const generateBtn = document.getElementById("generate-btn");
   const generateStatus = document.getElementById("generate-status");
   const generate = document.querySelector('input[name="generate"]:checked').value;
-  const notes = document.getElementById("notes-text").value;
 
   const approvedKeywords = [];
   document.querySelectorAll(".keyword-checkbox:checked").forEach((cb) => {
@@ -259,44 +494,24 @@ async function onGenerate() {
       return;
     }
 
-    let downloads = "";
-    if (data.resume_filename) downloads += fileLink(data.resume_filename, "Download resume");
-    if (data.cover_letter_filename) downloads += fileLink(data.cover_letter_filename, "Download cover letter");
-
-    let html = `<div class="card">`;
-    html += `<div class="downloads">${downloads}</div>`;
-    html += statTileHtml(data.match_score);
-
-    if (data.changes && data.changes.length) {
-      html += `<div class="changes-title">What changed</div><ul class="changes-list">`;
-      data.changes.forEach((c) => { html += `<li>${c}</li>`; });
-      html += `</ul>`;
-    }
-
-    if (data.resume_preview_html) {
-      html += `<button class="secondary preview-open-btn" style="width:100%;">View resume preview</button>`;
-    }
-    html += `</div>`;
-
     currentGenerateResult = data;
-    generateResult.innerHTML = html;
-
-    if (data.resume_preview_html) {
-      generateResult.querySelector(".preview-open-btn").addEventListener("click", () => {
-        const dialog = document.getElementById("preview-dialog");
-        document.getElementById("preview-dialog-content").innerHTML = data.resume_preview_html;
-        dialog.showModal();
-        dialog.scrollTop = 0; // showModal() can otherwise land scrolled past the title/note
-      });
-    }
+    renderGenerateResult(data, { autoOpenPreview });
+    saveJobCacheEntry(jobIdentity(currentJob), { generateResult: data });
   } catch (e) {
     clearInterval(timer);
-    generateStatus.innerHTML = "";
+    if (generateStatus) generateStatus.innerHTML = "";
     generateResult.innerHTML = `<div class="error-box">${e}</div>`;
   } finally {
     generateBtn.disabled = false;
   }
 }
+
+async function onGenerate() {
+  const notes = document.getElementById("notes-text").value;
+  await generateTailored(notes);
+}
+
+document.getElementById("preview-regenerate-btn").addEventListener("click", regenerateWithFeedback);
 
 async function fetchFileAsArrayBuffer(filename) {
   const resp = await fetch(`${BACKEND_URL}/files/${encodeURIComponent(filename)}`);

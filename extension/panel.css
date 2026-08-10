@@ -154,12 +154,31 @@ button.secondary:disabled { opacity: 0.55; }
   background: var(--surface); color: var(--text-1);
   border: 1px solid var(--border); border-radius: 10px; padding: 1rem;
 }
-/* Resume text needs more room than the profile form's short inputs, and the dialog itself is
-   the scroll container - the inner .preview-box shouldn't also scroll (nested scrollbars are
-   bad UX), so its own max-height is dropped here. */
-#preview-dialog { width: min(480px, 95vw); }
+/* Resume text needs a lot more room than the profile form's short inputs - both to read
+   comfortably and so a line of the resume doesn't wrap awkwardly at every third word - and
+   the dialog itself is the scroll container, so the inner .preview-box shouldn't also scroll
+   (nested scrollbars are bad UX), hence its own max-height is dropped here. */
+#preview-dialog { width: min(720px, 96vw); max-height: 92vh; }
 #preview-dialog .preview-box { max-height: none; overflow-y: visible; border: none; padding: 0; }
 #profile-dialog::backdrop, #preview-dialog::backdrop { background: rgba(0,0,0,0.45); }
 .dialog-title { font-size: 0.98rem; font-weight: 700; margin: 0 0 0.7rem; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.6rem; }
 .dialog-actions button.primary { width: auto; margin-top: 0; }
+
+/* Per-bullet comment affordance in the resume preview - .commentable-bullet/.has-comment/
+   .bullet-comment-* are added by panel.js after the backend's resume_preview_html is injected,
+   not part of that template itself. */
+.commentable-bullet { cursor: pointer; border-radius: 4px; padding: 1px 4px; margin: 0 -4px; transition: background 0.1s; }
+.commentable-bullet:hover { background: var(--accent-wash); }
+.commentable-bullet.has-comment { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+.bullet-comment-box {
+  cursor: default; margin: 0.35rem 0 0.5rem; padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--page);
+}
+.bullet-comment-input {
+  width: 100%; min-height: 50px; font-family: inherit; font-size: 0.78rem; color: var(--text-1);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.5rem;
+  resize: vertical;
+}
+.bullet-comment-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+.bullet-comment-actions button { padding: 0.25rem 0.55rem; font-size: 0.72rem; }

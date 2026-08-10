@@ -50,9 +50,10 @@
 
   <dialog id="preview-dialog" class="preview-dialog">
     <h2 class="dialog-title">Resume preview</h2>
-    <p class="preview-note">Highlighted = reworded from your master resume. Everything else is dimmed since it's unchanged - preview only, the downloaded PDF is clean.</p>
+    <p class="preview-note">Highlighted = reworded from your master resume. Everything else is dimmed since it's unchanged - preview only, the downloaded PDF is clean. Click any bullet to leave a note on it, then regenerate with your feedback applied.</p>
     <div id="preview-dialog-content" class="preview-box"></div>
     <div class="dialog-actions">
+      <button class="primary" id="preview-regenerate-btn" style="display:none; width:auto;">Regenerate with feedback</button>
       <button class="secondary" id="preview-close-btn">Close</button>
     </div>
   </dialog>

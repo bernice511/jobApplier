@@ -31,7 +31,7 @@ from jobapplier.common import resume_parser, resume_store
 from jobapplier.common.claude_cli import call_claude_json
 from jobapplier.common.config import GENERATED_DIR
 from jobapplier.common.resume_template import render_cover_letter, render_resume
-from jobapplier.webapp import analyze_cache, resume_diff, tailoring_log
+from jobapplier.webapp import analyze_cache, resume_diff, tailor_cache, tailoring_log
 from jobapplier.webapp.resume_preview import render_resume_preview_html
 
 GenerateOption = Literal["both", "resume", "cover_letter"]
@@ -472,10 +472,26 @@ def tailor_from_jd(
     tailored resume's fit all over again - see _compute_match_score's docstring for why."""
     jd_text = _clean_jd_text(jd_text)
     approved_keywords = approved_keywords or []
-    want_resume = generate in ("both", "resume")
-    want_cover = generate in ("both", "cover_letter")
     active_paths = resume_store.get_active_paths()
     master_resume = resume_parser.parse_and_cache(**active_paths)
+
+    cache_params = {
+        "company": company,
+        "title": title,
+        "location": location,
+        "generate": generate,
+        "approved_keywords": approved_keywords,
+        "notes": notes,
+        "matched_keyword_count": matched_keyword_count,
+        "suggested_keyword_count": suggested_keyword_count,
+        "core_requirement_count": core_requirement_count,
+    }
+    cached = tailor_cache.get(jd_text, master_resume, cache_params)
+    if cached is not None:
+        return cached
+
+    want_resume = generate in ("both", "resume")
+    want_cover = generate in ("both", "cover_letter")
 
     resume_result = None
     cover_result = None
@@ -538,7 +554,9 @@ def tailor_from_jd(
         record["cover_letter_path"] = str(cover_letter_pdf)
 
     tailoring_log.append_record(record)
-    return {**record, **extra}
+    result = {**record, **extra}
+    tailor_cache.set(jd_text, master_resume, cache_params, result)
+    return result
 
 
 def search_log(query: str) -> list[dict]:
