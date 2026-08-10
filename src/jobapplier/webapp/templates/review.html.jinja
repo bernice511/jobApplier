@@ -33,13 +33,20 @@
      a full-tab review (instead of the old side-panel dialog) was supposed to buy back. Later
      in source order than base's own <style>, so it wins the cascade at equal specificity
      without needing a hook in base.html.jinja for "this page wants to be wider." */
-  .main { max-width: 1500px; }
+  .main { max-width: 1900px; }
 
   .review-layout { display: flex; align-items: flex-start; gap: 1rem; }
-  .review-side { flex: 0 0 340px; }
+  .review-side { flex: 0 0 300px; }
   .review-main { flex: 1; min-width: 0; }
   .review-side textarea { margin-top: 0.4rem; }
   .review-side button.primary { margin-top: 0.7rem; }
+
+  /* base.html.jinja's shared .preview-box caps at max-height:480px with its own overflow-y:auto
+     scrollbar - built for a short inline preview under a form on other pages, not a full
+     resume on a page whose entire point is reviewing it. That inner scrollbar was trapping the
+     resume in a small window even though the page itself had plenty of room; letting it flow
+     with the page's own scroll instead reads as one document, not a box within a box. */
+  #review-preview-content { max-height: none; overflow-y: visible; }
 
   /* Per-bullet comment affordance in the resume preview - added by this page's own JS after
      resume_preview_html is injected, not part of that template itself. */
@@ -64,6 +71,13 @@
   }
 </style>
 <script>
+  // Collapse the nav sidebar just for this page load, not saved to the shared
+  // localStorage preference base.html.jinja's own collapse button uses - a full-tab review is
+  // the one page here where the ~140px the expanded nav costs is better spent on the resume
+  // preview than on links you're not navigating through mid-review. The collapse button still
+  // works normally if you want it back.
+  document.body.classList.add('sidebar-collapsed');
+
   const TOKEN = {{ token | tojson }};
 
   let session = null;
