@@ -27,6 +27,12 @@
     <option value="6">6+ Good</option>
     <option value="4">4+ Fair</option>
   </select>
+  <select id="alerts-category-filter" title="Scopes the live Adzuna search below - doesn't affect your saved alerts above.">
+    <option value="">All categories</option>
+    {% for value, label in adzuna_categories.items() %}
+    <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
   <button class="secondary" id="search-adzuna-btn" type="button">Search Adzuna</button>
 </div>
 <div id="alerts-list" class="job-card-grid"></div>
@@ -163,6 +169,7 @@
   // it on demand via /api/analyze, same as the Tailor page, instead of scoring a whole page
   // of results up front (which would mean a claude CLI call per result before anything shows).
   const searchAdzunaBtn = document.getElementById('search-adzuna-btn');
+  const categoryFilter = document.getElementById('alerts-category-filter');
   const liveSearchSection = document.getElementById('live-search-section');
   const liveSearchStatus = document.getElementById('live-search-status');
   const liveResultsList = document.getElementById('live-results-list');
@@ -222,9 +229,13 @@
     liveSearchSection.style.display = '';
     liveResultsList.innerHTML = '';
     searchAdzunaBtn.disabled = true;
-    liveSearchStatus.textContent = `Searching Adzuna for "${query}"...`;
+    const category = categoryFilter.value;
+    const categoryLabel = category ? categoryFilter.options[categoryFilter.selectedIndex].textContent : '';
+    liveSearchStatus.textContent = `Searching Adzuna for "${query}"${categoryLabel ? ' in ' + categoryLabel : ''}...`;
     try {
-      const resp = await fetch(`/api/alerts/search?q=${encodeURIComponent(query)}`);
+      const params = new URLSearchParams({ q: query });
+      if (category) params.set('category', category);
+      const resp = await fetch(`/api/alerts/search?${params}`);
       const data = await resp.json();
       if (!resp.ok) {
         liveSearchStatus.textContent = data.error || 'Search failed.';
@@ -232,10 +243,10 @@
       }
       const results = data.results || [];
       if (!results.length) {
-        liveSearchStatus.textContent = `No live results for "${query}".`;
+        liveSearchStatus.textContent = `No live results for "${query}"${categoryLabel ? ' in ' + categoryLabel : ''}.`;
         return;
       }
-      liveSearchStatus.textContent = `${results.length} result${results.length === 1 ? '' : 's'} for "${query}" - not yet scored against your resume.`;
+      liveSearchStatus.textContent = `${results.length} result${results.length === 1 ? '' : 's'} for "${query}"${categoryLabel ? ' in ' + categoryLabel : ''} - not yet scored against your resume.`;
       results.forEach((job, i) => liveResultsList.appendChild(renderLiveResultCard(job, i)));
     } catch (e) {
       liveSearchStatus.textContent = `Search failed: ${e}`;

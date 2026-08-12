@@ -77,7 +77,10 @@ def profile_page():
 
 @app.get("/alerts")
 def alerts_page():
-    return render_template("alerts.html.jinja", active_page="alerts")
+    return render_template(
+        "alerts.html.jinja", active_page="alerts",
+        adzuna_categories=job_alerts_adzuna_source.RELEVANT_CATEGORIES,
+    )
 
 
 @app.get("/api/alerts")
@@ -101,6 +104,9 @@ def api_alerts_search():
     query = request.args.get("q", "").strip()
     if not query:
         return jsonify({"error": "q is required."}), 400
+    category = request.args.get("category", "").strip()
+    if category and category not in job_alerts_adzuna_source.RELEVANT_CATEGORIES:
+        return jsonify({"error": f"Unknown category {category!r}."}), 400
 
     config = load_config()
     if not config.adzuna_app_id or not config.adzuna_app_key:
@@ -111,17 +117,23 @@ def api_alerts_search():
     results = []
     any_ok = False
     for location in locations:
-        try:
-            jobs = job_alerts_adzuna_source.fetch_jobs(query, location, config)
-        except job_alerts_adzuna_source.AdzunaError as exc:
-            print(f"Warning: {exc}", file=sys.stderr)
-            continue
-        any_ok = True
-        for job in jobs:
-            if job["job_id"] in seen_ids:
+        # Pull 2 pages per location - a single popular query (e.g. plain "internship") can
+        # have hundreds of matches for one city, and page 1 alone (20 results) barely scratches
+        # that, especially once split across multiple configured locations.
+        for page in (1, 2):
+            try:
+                jobs = job_alerts_adzuna_source.fetch_jobs(query, location, config, category=category or None, page=page)
+            except job_alerts_adzuna_source.AdzunaError as exc:
+                print(f"Warning: {exc}", file=sys.stderr)
                 continue
-            seen_ids.add(job["job_id"])
-            results.append(job)
+            any_ok = True
+            if not jobs:
+                break  # fewer than a full page - no point requesting page 2
+            for job in jobs:
+                if job["job_id"] in seen_ids:
+                    continue
+                seen_ids.add(job["job_id"])
+                results.append(job)
 
     if not any_ok:
         return jsonify({"error": "Adzuna search failed for every configured location - see server log."}), 502
