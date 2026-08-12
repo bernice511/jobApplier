@@ -202,6 +202,12 @@ function showJob(job) {
   jobCompanyEl.textContent = job.company || "(company not detected)";
   jdTextEl.value = job.description || "";
 
+  // Only the 5 sites with a dedicated extractor (see content.js's SITE_EXTRACTORS) get the
+  // confident, unattended "analyze + generate + autofill" button - everywhere else falls back
+  // to the generic scraper, which isn't validated against real pages the same way.
+  document.getElementById("one-click-apply-group").style.display = job.isKnownSite ? "" : "none";
+  document.getElementById("one-click-unsupported-note").style.display = job.isKnownSite ? "none" : "";
+
   if (isNewJob) {
     analyzeResult.innerHTML = "";
     generateResult.innerHTML = "";

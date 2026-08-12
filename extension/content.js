@@ -292,10 +292,17 @@ function extractJob() {
     // absence - the urlMatches() check above is what actually catches that case.
     const primary = site.extract();
     if (!primary.title) return null;
-    return { ...primary, url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID };
+    return { ...primary, url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID, isKnownSite: true };
   }
 
-  return { ...extractGeneric(), url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID };
+  // isKnownSite: false - panel.js hides 1-Click Apply for these. The generic extractor's
+  // title/description signals aren't validated against real pages the way the 5 dedicated
+  // extractors above are (see each one's own "unconfirmed against a live page" notes) - it's
+  // reasonable as a fallback for pre-filling the panel, but a single confident-looking button
+  // that runs analyze+generate+autofill unattended is a bigger promise than an unverified
+  // extractor should be making. Bulk-apply (a separate, still-being-designed feature) is meant
+  // to cover listing-heavy pages like this instead.
+  return { ...extractGeneric(), url: location.href, extractedAt: Date.now(), frameId: FRAME_INSTANCE_ID, isKnownSite: false };
 }
 
 let lastKey = "";
