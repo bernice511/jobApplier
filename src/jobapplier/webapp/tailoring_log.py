@@ -2,10 +2,13 @@
 from tracker.py's applications.csv, since these are resumes/cover letters generated from a
 pasted job description, not necessarily submitted LinkedIn applications.
 
-Also tracks whether the candidate actually applied (applied/date_applied) - added after the
-fact, so _migrate_if_needed() rewrites any pre-existing CSV (which predates these columns) to
-the current header before reading/appending, keeping every row's columns aligned with
-FIELDNAMES rather than silently misaligning DictReader's column mapping.
+Also tracks pipeline stage (see STATUSES/status) - added after the fact, so
+_migrate_if_needed() rewrites any pre-existing CSV (which predates these columns) to the
+current header before reading/appending, keeping every row's columns aligned with FIELDNAMES
+rather than silently misaligning DictReader's column mapping. "applied"/"date_applied" predate
+"status" (back when this was just a binary checkbox) and are kept in sync with it rather than
+removed, since date_applied specifically ("when did I apply") isn't recoverable from status
+alone once the pipeline moves on to interview/offer/rejected.
 """
 from __future__ import annotations
 
@@ -20,8 +23,11 @@ TAILORING_LOG_CSV = DATA_DIR / "tailoring_log.csv"
 FIELDNAMES = [
     "timestamp", "company", "title", "location",
     "resume_path", "cover_letter_path", "match_score",
-    "applied", "date_applied",
+    "applied", "date_applied", "status",
 ]
+
+# Order matters - this is the left-to-right column order of the Kanban board.
+STATUSES = ["saved", "applied", "interview", "offer", "rejected"]
 
 
 def _record_key(record: dict) -> str:
@@ -40,6 +46,12 @@ def _migrate_if_needed() -> None:
         if reader.fieldnames == FIELDNAMES:
             return
         rows = list(reader)
+    for row in rows:
+        # Rows from before "status" existed only have the old applied/date_applied checkbox -
+        # backfill a matching stage rather than leaving every pre-existing row stuck at blank
+        # (which would silently vanish from every Kanban column, not just default to "saved").
+        if not row.get("status"):
+            row["status"] = "applied" if row.get("applied") == "True" else "saved"
     with open(TAILORING_LOG_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
@@ -55,8 +67,10 @@ def append_record(record: dict) -> None:
     row = {field: record.get(field, "") for field in FIELDNAMES}
     if not row["timestamp"]:
         row["timestamp"] = datetime.now().isoformat(timespec="seconds")
+    if not row["status"]:
+        row["status"] = "saved"
     if not row["applied"]:
-        row["applied"] = "False"
+        row["applied"] = "True" if row["status"] != "saved" else "False"
 
     with open(TAILORING_LOG_CSV, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
@@ -74,12 +88,21 @@ def load_records() -> list[dict]:
     for row in rows:
         row["record_key"] = _record_key(row)
         row["applied"] = row.get("applied") == "True"
+        row["status"] = row.get("status") or "saved"
     return rows
 
 
-def set_applied(record_key: str, applied: bool) -> bool:
+def set_status(record_key: str, status: str) -> bool:
     """Rewrites the whole file (no in-place row update for CSVs) - fine for a small personal
-    log. Returns True if record_key matched a row, False otherwise."""
+    log. Returns True if record_key matched a row, False if it didn't or status is invalid.
+
+    Keeps the legacy applied/date_applied columns in sync (applied = status != "saved") so
+    anything still reading those directly doesn't regress - date_applied specifically is set
+    once, the first time a record leaves "saved", and left alone on every later transition
+    (interview/offer/rejected) since it records when you applied, not when you last moved the
+    card."""
+    if status not in STATUSES:
+        return False
     _migrate_if_needed()
     if not TAILORING_LOG_CSV.exists():
         return False
@@ -89,8 +112,12 @@ def set_applied(record_key: str, applied: bool) -> bool:
     found = False
     for row in rows:
         if _record_key(row) == record_key:
-            row["applied"] = "True" if applied else "False"
-            row["date_applied"] = date.today().isoformat() if applied else ""
+            row["status"] = status
+            row["applied"] = "True" if status != "saved" else "False"
+            if status != "saved" and not row.get("date_applied"):
+                row["date_applied"] = date.today().isoformat()
+            elif status == "saved":
+                row["date_applied"] = ""
             found = True
 
     if found:

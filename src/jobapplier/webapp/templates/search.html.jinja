@@ -3,66 +3,63 @@
 {% block content %}
 <div class="card">
   <h2>Applications</h2>
-  <p class="hint">Every resume/cover letter you've generated from a pasted JD - track which
-    ones you actually applied to.</p>
+  <p class="hint">Every resume/cover letter you've generated from a pasted JD, organized by
+    where it stands - drag a card to a different column, or use its "Move to" menu.</p>
   <input id="filter-input" type="text" placeholder="Filter by company, title, or location..."
-    style="width:100%; margin-bottom:0.9rem; padding:0.6rem 0.9rem; font-size:0.9rem; color:var(--text-1); background:var(--page); border:1px solid var(--border); border-radius:999px; outline:none;">
-  <div id="app-list"></div>
-  <div id="app-empty" class="hint" style="display:none;">No applications match.</div>
-  <div id="app-pagination" class="pagination"></div>
+    style="width:100%; padding:0.6rem 0.9rem; font-size:0.9rem; color:var(--text-1); background:var(--page); border:1px solid var(--border); border-radius:999px; outline:none;">
 </div>
+
+<div class="kanban-board" id="kanban-board"></div>
+<div id="app-empty" class="hint" style="display:none;">No applications match.</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+  .kanban-board { display: flex; gap: 0.8rem; align-items: flex-start; overflow-x: auto; padding-bottom: 0.5rem; }
+  .kanban-column {
+    flex: 0 0 260px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 0.7rem; min-height: 80px;
+  }
+  .kanban-column.drag-over { border-color: var(--accent); background: var(--accent-wash); }
+  .kanban-column-title {
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--text-2); margin-bottom: 0.6rem; display: flex; justify-content: space-between;
+  }
+  .kanban-column-count { color: var(--text-muted); font-weight: 500; }
+  .kanban-card {
+    background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.65rem 0.75rem; margin-bottom: 0.6rem; cursor: grab; font-size: 0.85rem;
+  }
+  .kanban-card:active { cursor: grabbing; }
+  .kanban-card.dragging { opacity: 0.4; }
+  .kanban-card .meta { font-weight: 600; }
+  .kanban-card .sub { color: var(--text-muted); font-size: 0.75rem; margin: 2px 0 0.4rem; }
+  .kanban-card .downloads { margin: 0.4rem 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .kanban-score {
+    font-size: 0.72rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 999px;
+    display: inline-block; margin-bottom: 0.3rem; background: var(--surface);
+  }
+  .kanban-card select.move-select {
+    width: 100%; margin-top: 0.4rem; font-size: 0.78rem; padding: 0.3rem 0.4rem;
+    border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-1);
+  }
+  @media (max-width: 900px) { .kanban-column { flex-basis: 220px; } }
+</style>
 <script>
-  const PAGE_SIZE = 10;
+  // Order matters - this is the left-to-right column order, and must match
+  // tailoring_log.STATUSES on the backend.
+  const STATUSES = [
+    { key: 'saved', label: 'Saved' },
+    { key: 'applied', label: 'Applied' },
+    { key: 'interview', label: 'Interview' },
+    { key: 'offer', label: 'Offer' },
+    { key: 'rejected', label: 'Rejected' },
+  ];
+
   const filterInput = document.getElementById('filter-input');
-  const appList = document.getElementById('app-list');
+  const board = document.getElementById('kanban-board');
   const appEmpty = document.getElementById('app-empty');
-  const appPagination = document.getElementById('app-pagination');
   let allApplications = [];
-  let filteredApplications = [];
-  let currentPage = 1;
-
-  function renderApplicationCard(record) {
-    const div = document.createElement('div');
-    div.className = 'job-card';
-    let downloads = '';
-    if (record.resume_filename) downloads += fileLink(record.resume_filename, 'Resume');
-    if (record.cover_letter_filename) downloads += fileLink(record.cover_letter_filename, 'Cover letter');
-
-    div.innerHTML = `
-      <div class="job-card-main">
-        <div class="meta">${record.title} @ ${record.company}${record.location ? ' - ' + record.location : ''}</div>
-        <div class="sub">${record.timestamp || ''}</div>
-        <div class="downloads">${downloads}</div>
-        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.85rem; color:var(--text-2); cursor:pointer;">
-          <input type="checkbox" class="applied-checkbox" ${record.applied ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;">
-          <span class="applied-label">${record.applied ? 'Applied on ' + record.date_applied : 'Mark as applied'}</span>
-        </label>
-      </div>
-      ${matchScorePanelHtml(record.match_score)}
-    `;
-    div.querySelector('.applied-checkbox').addEventListener('change', (e) => markApplied(record, e.target));
-    return div;
-  }
-
-  async function markApplied(record, checkbox) {
-    const applied = checkbox.checked;
-    const resp = await fetch('/api/applications/mark_applied', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record_key: record.record_key, applied }),
-    });
-    if (!resp.ok) {
-      checkbox.checked = !applied;
-      return;
-    }
-    record.applied = applied;
-    record.date_applied = applied ? new Date().toISOString().slice(0, 10) : '';
-    checkbox.closest('label').querySelector('.applied-label').textContent =
-      applied ? `Applied on ${record.date_applied}` : 'Mark as applied';
-  }
 
   function matchesFilter(record, tokens) {
     if (!tokens.length) return true;
@@ -70,55 +67,106 @@
     return tokens.every((t) => haystack.includes(t));
   }
 
-  function renderPagination() {
-    const totalPages = Math.ceil(filteredApplications.length / PAGE_SIZE);
-    appPagination.innerHTML = '';
-    if (totalPages <= 1) return;
+  function renderCard(record) {
+    const div = document.createElement('div');
+    div.className = 'kanban-card';
+    div.draggable = true;
+    div.dataset.recordKey = record.record_key;
 
-    const addBtn = (label, page, opts = {}) => {
-      const btn = document.createElement('button');
-      btn.textContent = label;
-      if (opts.active) btn.classList.add('active');
-      if (opts.disabled) btn.disabled = true;
-      btn.addEventListener('click', () => { currentPage = page; renderPage(); });
-      appPagination.appendChild(btn);
-    };
+    let downloads = '';
+    if (record.resume_filename) downloads += fileLink(record.resume_filename, 'Resume');
+    if (record.cover_letter_filename) downloads += fileLink(record.cover_letter_filename, 'Cover letter');
 
-    addBtn('‹', currentPage - 1, { disabled: currentPage === 1 });
-    for (let page = 1; page <= totalPages; page++) {
-      addBtn(String(page), page, { active: page === currentPage });
-    }
-    addBtn('›', currentPage + 1, { disabled: currentPage === totalPages });
+    const hasScore = record.match_score !== undefined && record.match_score !== null && record.match_score !== '';
+    const scoreBadge = hasScore
+      ? `<span class="kanban-score" style="color:${scoreColor(record.match_score)}; border:1px solid ${scoreColor(record.match_score)};">${record.match_score}/10</span>`
+      : '';
+
+    div.innerHTML = `
+      <div class="meta">${record.title}</div>
+      <div class="sub">${record.company}${record.location ? ' - ' + record.location : ''}</div>
+      ${scoreBadge}
+      <div class="downloads">${downloads}</div>
+      <select class="move-select"></select>
+    `;
+
+    const select = div.querySelector('.move-select');
+    STATUSES.forEach(({ key, label }) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = `Move to ${label}`;
+      if (key === record.status) opt.selected = true;
+      select.appendChild(opt);
+    });
+    // Dragging isn't the only way to change status - a select works without needing precise
+    // drag targeting, and is the only way at all on touch devices with no drag-and-drop.
+    select.addEventListener('click', (e) => e.stopPropagation());
+    select.addEventListener('change', () => setStatus(record, select.value));
+
+    div.addEventListener('dragstart', () => div.classList.add('dragging'));
+    div.addEventListener('dragend', () => div.classList.remove('dragging'));
+
+    return div;
   }
 
-  function renderPage() {
-    appList.innerHTML = '';
-    if (!filteredApplications.length) {
-      appEmpty.style.display = '';
-      appPagination.innerHTML = '';
-      return;
+  async function setStatus(record, status) {
+    const previous = record.status;
+    record.status = status; // optimistic - rendered immediately, rolled back below on failure
+    renderBoard();
+    const resp = await fetch('/api/applications/set_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record_key: record.record_key, status }),
+    });
+    if (!resp.ok) {
+      record.status = previous;
+      renderBoard();
     }
-    appEmpty.style.display = 'none';
-    const start = (currentPage - 1) * PAGE_SIZE;
-    filteredApplications.slice(start, start + PAGE_SIZE).forEach((record) => appList.appendChild(renderApplicationCard(record)));
-    renderPagination();
   }
 
-  function renderList() {
+  function renderBoard() {
     const query = filterInput.value.trim().toLowerCase();
     const tokens = query.split(/\s+/).filter((t) => t.length >= 2);
-    filteredApplications = allApplications.filter((r) => matchesFilter(r, tokens));
-    currentPage = 1;
-    renderPage();
+    const filtered = allApplications.filter((r) => matchesFilter(r, tokens));
+
+    appEmpty.style.display = filtered.length ? 'none' : '';
+    board.innerHTML = '';
+
+    STATUSES.forEach(({ key, label }) => {
+      const columnRecords = filtered
+        .filter((r) => (r.status || 'saved') === key)
+        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+      const column = document.createElement('div');
+      column.className = 'kanban-column';
+      column.innerHTML = `<div class="kanban-column-title">${label} <span class="kanban-column-count">${columnRecords.length}</span></div>`;
+      columnRecords.forEach((record) => column.appendChild(renderCard(record)));
+
+      column.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        column.classList.add('drag-over');
+      });
+      column.addEventListener('dragleave', () => column.classList.remove('drag-over'));
+      column.addEventListener('drop', (e) => {
+        e.preventDefault();
+        column.classList.remove('drag-over');
+        const dragging = board.querySelector('.kanban-card.dragging');
+        if (!dragging) return;
+        const record = allApplications.find((r) => r.record_key === dragging.dataset.recordKey);
+        if (record && record.status !== key) setStatus(record, key);
+      });
+
+      board.appendChild(column);
+    });
   }
 
-  filterInput.addEventListener('input', renderList);
+  filterInput.addEventListener('input', renderBoard);
 
   async function loadApplications() {
     const resp = await fetch('/api/applications');
     const data = await resp.json();
     allApplications = data.applications || [];
-    renderList();
+    renderBoard();
   }
 
   loadApplications();

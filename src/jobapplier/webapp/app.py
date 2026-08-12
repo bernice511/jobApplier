@@ -295,14 +295,16 @@ def api_applications():
     return jsonify({"applications": records})
 
 
-@app.post("/api/applications/mark_applied")
-def api_applications_mark_applied():
+@app.post("/api/applications/set_status")
+def api_applications_set_status():
     body = request.get_json(silent=True) or {}
     record_key = body.get("record_key", "").strip()
-    applied = bool(body.get("applied"))
+    status = body.get("status", "").strip()
     if not record_key:
         return jsonify({"error": "record_key is required."}), 400
-    if not tailoring_log.set_applied(record_key, applied):
+    if status not in tailoring_log.STATUSES:
+        return jsonify({"error": f"status must be one of {tailoring_log.STATUSES}."}), 400
+    if not tailoring_log.set_status(record_key, status):
         return jsonify({"error": "Unknown record_key."}), 404
     return jsonify({"ok": True})
 
