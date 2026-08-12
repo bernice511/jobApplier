@@ -63,8 +63,16 @@
       <div class="result-header">
         <div class="result-title">${data.title} @ ${data.company}${data.location ? ' - ' + data.location : ''}</div>
       </div>
-      ${statTileHtml(data.match_score)}
     `;
+
+    if (data.duplicates && data.duplicates.length) {
+      const best = data.duplicates[0];
+      const statusPhrase = best.status === 'saved' ? 'generated a resume for' : `marked as "${best.status}" for`;
+      const extra = data.duplicates.length > 1 ? ` (+${data.duplicates.length - 1} more similar)` : '';
+      html += `<div class="duplicate-notice">You've already ${statusPhrase} a similar job: <strong>${best.title}</strong> @ <strong>${best.company}</strong>${extra}</div>`;
+    }
+
+    html += statTileHtml(data.match_score);
 
     if (data.matched_keywords && data.matched_keywords.length) {
       html += `<div class="changes-title">Already matches</div><div class="chip-row">`;

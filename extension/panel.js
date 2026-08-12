@@ -293,6 +293,14 @@ analyzeBtn.addEventListener("click", runAnalyze);
 
 function renderAnalysis(data) {
   let html = `<div class="card">`;
+
+  if (data.duplicates && data.duplicates.length) {
+    const best = data.duplicates[0];
+    const statusPhrase = best.status === "saved" ? "generated a resume for" : `marked as "${best.status}" for`;
+    const extra = data.duplicates.length > 1 ? ` (+${data.duplicates.length - 1} more similar)` : "";
+    html += `<div class="duplicate-notice">You've already ${statusPhrase} a similar job: <strong>${best.title}</strong> @ <strong>${best.company}</strong>${extra}</div>`;
+  }
+
   html += `${statTileHtml(data.match_score)}`;
 
   if (data.matched_keywords && data.matched_keywords.length) {

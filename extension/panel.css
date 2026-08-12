@@ -69,6 +69,11 @@ button.primary:disabled { opacity: 0.55; }
 }
 .error-box code { display: block; margin-top: 0.3rem; font-size: 0.78rem; }
 
+.duplicate-notice {
+  padding: 0.6rem 0.8rem; border-radius: 8px; margin-bottom: 0.6rem;
+  background: var(--accent-wash); color: var(--accent); font-size: 0.82rem;
+}
+
 .loading-box {
   padding: 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
   color: var(--text-2); font-size: 0.82rem;

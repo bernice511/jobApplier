@@ -12,7 +12,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from jobapplier.common import resume_parser, resume_store, screening_answers
 from jobapplier.common.config import GENERATED_DIR, RESUME_DIR, load_config
 from jobapplier.job_alerts import store as job_alerts_store
-from jobapplier.webapp import review_session, tailoring_log, tailoring_service
+from jobapplier.webapp import duplicate_detection, review_session, tailoring_log, tailoring_service
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB - generous for a resume PDF
@@ -223,6 +223,12 @@ def api_analyze():
         analysis = tailoring_service.analyze_jd(jd_text)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+    # Cheap (no LLM) fuzzy company+title check against everything already tailored/tracked -
+    # riding along on the analyze response rather than a separate round-trip, since it only
+    # needs the company/title analyze_jd() already just extracted.
+    analysis["duplicates"] = duplicate_detection.find_duplicates(
+        analysis.get("company", ""), analysis.get("title", "")
+    )
     return jsonify(analysis)
 
 
