@@ -31,7 +31,7 @@ from jobapplier.common import resume_parser, resume_store
 from jobapplier.common.claude_cli import call_claude_json
 from jobapplier.common.config import GENERATED_DIR
 from jobapplier.common.resume_template import render_cover_letter, render_resume
-from jobapplier.webapp import analyze_cache, resume_diff, tailor_cache, tailoring_log
+from jobapplier.webapp import analyze_cache, resume_diff, resume_patch, tailor_cache, tailoring_log
 from jobapplier.webapp.resume_preview import render_resume_preview_html
 
 GenerateOption = Literal["both", "resume", "cover_letter"]
@@ -182,45 +182,46 @@ emphasis, wording, or framing):
 """
 
 RESUME_BLOCK = """
-"resume" must be the master resume re-expressed in this exact schema (identical shape to
-the input - same section types, same keys):
+"resume_patch" describes ONLY what changes from the master resume below - never repeat
+unchanged content back. Schema:
 {
-  "name": str,
-  "tagline": str | null,
-  "contact": [str, ...],
-  "sections": [
-    {"title": str, "type": "paragraph", "content": str},
-    {"title": str, "type": "skills", "categories": [{"name": str, "items": [str, ...]}]},
-    {"title": str, "type": "entries", "entries": [
-      {
-        "header_left_bold": str, "header_left_normal": str | null,
-        "header_right": str,
-        "two_line": bool, "sub_left": str | null, "sub_right": str | null,
-        "bullets": [str, ...],
-        "subentries": [{"header_left_bold": str, "header_right": str, "bullets": [str, ...]}]
-      }
-    ]}
+  "profile_content": str,
+  "skills": {"categories": [{"name": str, "items": [str, ...]}]} | null,
+  "entries": [
+    {
+      "header_left_bold": str,
+      "bullets": [{"keep": int} | {"text": str}, ...] | null,
+      "subentries": [{"header_left_bold": str, "bullets": [{"keep": int} | {"text": str}, ...]}] | null
+    }
   ]
 }
 
-Tailoring guidance for "resume" - act as a senior hiring manager reviewing this for an
-ATS and for human recruiters:
-- Rewrite the "Profile"/summary paragraph to foreground the candidate's most relevant
-  existing experience for this job, using the JD's own terminology where it truthfully
-  applies, to maximize ATS keyword match.
-- Within each experience/project entry, you may reorder bullets so the most JD-relevant
-  ones come first, and reword bullets - in Action + Context + Result form, kept to about
-  2 lines each - to use the JD's terminology WHERE that terminology truthfully describes
-  what the bullet already says. Do not delete substantive content or metrics.
-- In "Technical Skills", you may reorder categories/items to put the most JD-relevant ones
-  first, but the set of skills must stay identical to the input (no additions or removals)
-  UNLESS a term appears in the approved-keywords list below, in which case you may fold it
-  into the relevant category as a real skill.
-- Do not change dates, titles, company names, or numeric metrics.
-- Keep every section from the input present in the output, in the same section order, and
-  keep entries (companies/projects) within each section in the same order.
-- Carry "tagline" through unchanged if present. Never repeat its text inside a section's
-  content, even if a section's paragraph happens to start with the same words.
+Tailoring guidance - act as a senior hiring manager reviewing this for an ATS and for human
+recruiters:
+- "profile_content": the full new text of the Profile/summary paragraph, rewritten to
+  foreground the candidate's most relevant existing experience for this job, using the JD's
+  own terminology where it truthfully applies, to maximize ATS keyword match. Always provide
+  this - a resume's summary should always be worth re-targeting for the specific job.
+- "skills": omit entirely (or use null) if Technical Skills doesn't need to change. Otherwise
+  the FULL new set of categories/items, reordered to put the most JD-relevant ones first - the
+  set of skills must stay identical to the master resume's (no additions or removals) UNLESS a
+  term appears in the approved-keywords list below, in which case you may fold it into the
+  relevant category as a real skill.
+- "entries": ONLY the experience/project entries that need at least one bullet reworded or
+  reordered, identified by "header_left_bold" copied EXACTLY from the master resume below -
+  omit any entry with nothing worth changing entirely, do not list it just to leave it
+  untouched. For each entry you DO include, "bullets" must list every one of that entry's
+  bullets, in final order: {"keep": N} to reuse the master's Nth bullet (0-indexed, counting
+  from the master resume below) verbatim, or {"text": "..."} for a bullet you're rewording -
+  in Action + Context + Result form, kept to about 2 lines each, using the JD's terminology
+  WHERE that terminology truthfully describes what the bullet already says. Do not delete
+  substantive content or metrics, and do not invent a bullet that doesn't correspond to
+  something the candidate actually did. "subentries" works the same way, one level deeper.
+- Do not change dates, titles, company names, or numeric metrics - and since those never
+  change, never include "header_left_normal"/"header_right"/"two_line"/"sub_left"/"sub_right"
+  in a patched entry, only "header_left_bold" and whichever of "bullets"/"subentries" you're
+  actually changing.
+- Never touch "name", "contact", or "tagline" - they are not part of this patch at all.
 """
 
 COVER_LETTER_BLOCK = """
@@ -391,7 +392,7 @@ def _build_prompt(
     notes: str,
 ) -> str:
     if kind == "resume":
-        keys = ["resume"]
+        keys = ["resume_patch"]
         task_sentence = "Tailor a candidate's resume for the job described below."
         body = RESUME_BLOCK
     else:
@@ -432,9 +433,15 @@ def _generate_resume(jd_text, master_resume, company, title, location, approved_
         jd_text, master_resume, company, title, location, "resume", approved_keywords, notes
     )
     result = call_claude_json(prompt, system_prompt=_GENERATE_SYSTEM_PROMPT)
-    if "resume" not in result:
-        raise ValueError("Claude response missing 'resume' key")
-    return result
+    if "resume_patch" not in result:
+        raise ValueError("Claude response missing 'resume_patch' key")
+    # Claude only sends back what changed (see RESUME_BLOCK) - this reconstructs the full
+    # resume dict render_resume()/resume_diff.diff_resume() expect, same as if Claude had
+    # written the whole thing out itself. A malformed patch (unknown header, bad bullet index)
+    # raises here, same as the old "missing key" check above - both mean the model didn't
+    # follow the schema, and it's better to surface that than silently render something wrong.
+    full_resume = resume_patch.apply_patch(master_resume, result["resume_patch"])
+    return {"resume": full_resume}
 
 
 def _generate_cover_letter(jd_text, master_resume, company, title, location, approved_keywords, notes):
