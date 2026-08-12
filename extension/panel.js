@@ -11,6 +11,8 @@ const analyzeStatus = document.getElementById("analyze-status");
 const analyzeResult = document.getElementById("analyze-result");
 const generateResult = document.getElementById("generate-result");
 const autofillBtn = document.getElementById("autofill-btn");
+const oneClickBtn = document.getElementById("one-click-apply-btn");
+const oneClickStatus = document.getElementById("one-click-status");
 const profileDialog = document.getElementById("profile-dialog");
 const profileOpenBtn = document.getElementById("profile-open-btn");
 const profileCloseBtn = document.getElementById("profile-close-btn");
@@ -564,6 +566,49 @@ async function onAutofill() {
     autofillBtn.disabled = false;
   }
 }
+
+// Orchestrates the three previously-separate manual steps (Analyze -> Generate -> Autofill)
+// into one click. Each step is skipped if its result already exists for this job (analysis
+// from a prior auto-analyze or job-cache restore; a generated resume from an earlier Generate
+// or a previous 1-Click Apply run) - both because re-running an already-cached step wastes
+// time for no benefit, and because tailor_cache.py means a "fresh" call for identical inputs
+// is instant anyway, so skipping is purely an optimization, not a correctness requirement.
+// Stops after autofill - never clicks Submit/Apply, same boundary the standalone Autofill
+// button already has.
+async function onOneClickApply() {
+  oneClickBtn.disabled = true;
+  clearTimeout(autoAnalyzeTimer); // this click supersedes any pending debounced auto-analyze
+
+  try {
+    if (!currentAnalysis) {
+      const timer = startLoading(oneClickStatus, "Checking fit...");
+      await runAnalyze();
+      clearInterval(timer);
+      if (!currentAnalysis) {
+        oneClickStatus.innerHTML = `<div class="error-box">Couldn't analyze this job - see above for details.</div>`;
+        return;
+      }
+    }
+    oneClickStatus.innerHTML = "";
+
+    if (!currentGenerateResult) {
+      const timer = startLoading(oneClickStatus, "Generating your tailored resume...");
+      await generateTailored("");
+      clearInterval(timer);
+      if (!currentGenerateResult) {
+        oneClickStatus.innerHTML = `<div class="error-box">Couldn't generate a resume - see above for details.</div>`;
+        return;
+      }
+    }
+    oneClickStatus.innerHTML = "";
+
+    await onAutofill(); // renders its own "Filling in the form..." status/result
+  } finally {
+    oneClickBtn.disabled = false;
+  }
+}
+
+oneClickBtn.addEventListener("click", onOneClickApply);
 
 function renderAutofillResult(result) {
   const autofillResultEl = document.getElementById("autofill-result");
