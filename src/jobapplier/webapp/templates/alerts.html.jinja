@@ -182,7 +182,7 @@
       <div class="job-card-top">
         <div class="job-card-main">
           <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
-          <div class="sub">Posted ${job.posted_date ? job.posted_date.slice(0, 10) : ''}</div>
+          <div class="sub">via ${job.source || 'Adzuna'}${job.posted_date ? ' - ' + job.posted_date.slice(0, 10) : ''}</div>
         </div>
         <div class="live-score-slot"></div>
       </div>

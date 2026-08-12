@@ -58,6 +58,9 @@ class Config:
     adzuna_app_id: str = field(default_factory=lambda: os.getenv("ADZUNA_APP_ID", ""))
     adzuna_app_key: str = field(default_factory=lambda: os.getenv("ADZUNA_APP_KEY", ""))
     adzuna_country: str = field(default_factory=lambda: os.getenv("ADZUNA_COUNTRY", "us"))
+    # Optional second live-search source (jooble.org/api/about for a free key) - purely
+    # additive, the live search endpoint just skips Jooble entirely if this is blank.
+    jooble_api_key: str = field(default_factory=lambda: os.getenv("JOOBLE_API_KEY", ""))
     alert_match_threshold: int = field(
         default_factory=lambda: int(os.getenv("ALERT_MATCH_THRESHOLD", "6"))
     )

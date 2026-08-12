@@ -13,6 +13,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from jobapplier.common import resume_parser, resume_store, screening_answers
 from jobapplier.common.config import GENERATED_DIR, RESUME_DIR, load_config
 from jobapplier.job_alerts import adzuna_source as job_alerts_adzuna_source
+from jobapplier.job_alerts import jooble_source as job_alerts_jooble_source
 from jobapplier.job_alerts import store as job_alerts_store
 from jobapplier.webapp import (
     app_settings,
@@ -96,9 +97,10 @@ def api_alerts():
 
 @app.get("/api/alerts/search")
 def api_alerts_search():
-    """Ad-hoc live search against Adzuna, independent of the scheduled job_alerts pipeline -
-    for exploring beyond whatever JOB_TITLES already covers. Deliberately returns raw,
-    unscored listings (fast, a handful of Adzuna calls) rather than scoring every result via
+    """Ad-hoc live search against Adzuna (required) and Jooble (optional second source,
+    skipped entirely if JOOBLE_API_KEY isn't set) - independent of the scheduled job_alerts
+    pipeline, for exploring beyond whatever JOB_TITLES already covers. Deliberately returns
+    raw, unscored listings (fast, a handful of API calls) rather than scoring every result via
     the claude CLI up front, which for a page of results would make search feel broken - the
     UI scores a listing on demand (see POST /api/analyze) only once the user asks for it."""
     query = request.args.get("q", "").strip()
@@ -133,6 +135,23 @@ def api_alerts_search():
                 if job["job_id"] in seen_ids:
                     continue
                 seen_ids.add(job["job_id"])
+                job["source"] = "Adzuna"
+                results.append(job)
+
+    if config.jooble_api_key:
+        # Jooble has no category filter, and only returns a short snippet rather than a full
+        # description - fine for browsing, but Analyze-match scores from it are less reliable.
+        for location in locations:
+            try:
+                jobs = job_alerts_jooble_source.fetch_jobs(query, location, config)
+            except job_alerts_jooble_source.JoobleError as exc:
+                print(f"Warning: {exc}", file=sys.stderr)
+                continue
+            for job in jobs:
+                if job["job_id"] in seen_ids:
+                    continue
+                seen_ids.add(job["job_id"])
+                job["source"] = "Jooble"
                 results.append(job)
 
     if not any_ok:
