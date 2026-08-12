@@ -167,6 +167,10 @@ def _build_profile() -> dict | None:
         "linkedin_url": answers.get("linkedin_url", ""),
         "github_url": answers.get("github_url", ""),
         "website_url": answers.get("website_url", ""),
+        "how_heard": answers.get("how_heard", ""),
+        "willing_to_relocate": answers.get("willing_to_relocate", ""),
+        "currently_employed": answers.get("currently_employed", ""),
+        "available_start_date": answers.get("available_start_date", ""),
         "patterns": answers.get("patterns", {}),
     }
 

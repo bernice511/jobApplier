@@ -48,6 +48,14 @@ STRUCTURED_FIELDS = [
     "linkedin_url",
     "github_url",
     "website_url",
+    # These four recur across almost every ATS (Workday/Greenhouse/Lever all ask some form of
+    # each) but previously had no structured field - autofill could only pick them up via the
+    # slower "learn it the first time you hit it" patterns fallback. Answering them once here
+    # means a 1-click apply doesn't stall on the same handful of questions on every application.
+    "how_heard",
+    "willing_to_relocate",
+    "currently_employed",
+    "available_start_date",
 ]
 
 

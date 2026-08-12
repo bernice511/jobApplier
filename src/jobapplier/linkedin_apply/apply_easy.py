@@ -44,6 +44,13 @@ QUESTION_KEY_HINTS = [
     ("github", "github_url"),
     ("portfolio", "website_url"),
     ("website", "website_url"),
+    ("hear about", "how_heard"),
+    ("how did you find", "how_heard"),
+    ("relocate", "willing_to_relocate"),
+    ("currently employed", "currently_employed"),
+    ("start date", "available_start_date"),
+    ("available to start", "available_start_date"),
+    ("when can you start", "available_start_date"),
 ]
 
 

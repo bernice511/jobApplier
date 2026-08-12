@@ -19,7 +19,8 @@ const profileSaveBtn = document.getElementById("profile-save-btn");
 const PROFILE_FIELDS = [
   "first_name", "last_name", "phone", "email", "work_authorization", "requires_sponsorship",
   "notice_period_days", "salary_expectation", "years_experience_default", "linkedin_url",
-  "github_url", "website_url",
+  "github_url", "website_url", "how_heard", "willing_to_relocate", "currently_employed",
+  "available_start_date",
 ];
 
 let currentJob = null;
