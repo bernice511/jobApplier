@@ -26,6 +26,29 @@ function isSkippableQuestion(questionText) {
   return CONSENT_DENYLIST.some((t) => q.includes(t)) || NOISE_DENYLIST.some((t) => q.includes(t));
 }
 
+// Reloading the extension in chrome://extensions invalidates the connection for any content
+// script already injected into an already-open tab - every chrome.* call in it then throws
+// "Extension context invalidated" until that tab itself is reloaded. Every chrome.* call below
+// goes through this so that hits a soft failure (and stops the observer re-triggering it on
+// every DOM mutation) instead of an uncaught exception in the page's console.
+let contextInvalidated = false;
+
+function safeCall(fn) {
+  if (contextInvalidated) return;
+  try {
+    fn();
+  } catch (e) {
+    if (String(e).includes("Extension context invalidated")) {
+      contextInvalidated = true;
+      if (widgetObserver) widgetObserver.disconnect();
+    } else {
+      throw e;
+    }
+  }
+}
+
+let widgetObserver = null;
+
 // Same generic label-resolution priority order as autofill.js's resolveLabelText().
 function resolveLabelText(field) {
   if (field.id) {
@@ -79,7 +102,7 @@ function injectFloatingButton() {
   });
   openBtn.addEventListener("click", () => {
     wrapper.style.display = "none"; // optimistic - panel.js's own load signal confirms this
-    chrome.runtime.sendMessage({ type: "JOBAPPLIER_OPEN_PANEL" });
+    safeCall(() => chrome.runtime.sendMessage({ type: "JOBAPPLIER_OPEN_PANEL" }));
   });
 
   const closeBtn = document.createElement("button");
@@ -95,7 +118,7 @@ function injectFloatingButton() {
   closeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     wrapper.style.display = "none";
-    chrome.storage.local.set({ [WIDGET_DISMISSED_KEY]: true });
+    safeCall(() => chrome.storage.local.set({ [WIDGET_DISMISSED_KEY]: true }));
   });
 
   wrapper.style.position = "fixed";
@@ -107,21 +130,25 @@ function injectFloatingButton() {
   wrapper.appendChild(inner);
   document.body.appendChild(wrapper);
 
-  chrome.storage.local.get([PANEL_OPEN_KEY, WIDGET_DISMISSED_KEY], (data) => {
-    if (data[PANEL_OPEN_KEY] || data[WIDGET_DISMISSED_KEY]) wrapper.style.display = "none";
+  safeCall(() => {
+    chrome.storage.local.get([PANEL_OPEN_KEY, WIDGET_DISMISSED_KEY], (data) => {
+      if (data[PANEL_OPEN_KEY] || data[WIDGET_DISMISSED_KEY]) wrapper.style.display = "none";
+    });
   });
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  const wrapper = document.getElementById("jobapplier-floating-widget");
-  if (!wrapper) return;
-  if (PANEL_OPEN_KEY in changes) {
-    wrapper.style.display = changes[PANEL_OPEN_KEY].newValue ? "none" : "";
-  }
-  if (WIDGET_DISMISSED_KEY in changes && changes[WIDGET_DISMISSED_KEY].newValue) {
-    wrapper.style.display = "none";
-  }
+safeCall(() => {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    const wrapper = document.getElementById("jobapplier-floating-widget");
+    if (!wrapper) return;
+    if (PANEL_OPEN_KEY in changes) {
+      wrapper.style.display = changes[PANEL_OPEN_KEY].newValue ? "none" : "";
+    }
+    if (WIDGET_DISMISSED_KEY in changes && changes[WIDGET_DISMISSED_KEY].newValue) {
+      wrapper.style.display = "none";
+    }
+  });
 });
 
 // --- 2. Per-field "AI answer" buttons for essay-type questions ---
@@ -162,21 +189,27 @@ function injectAnswerButton(textarea, questionText) {
   btn.addEventListener("click", () => {
     btn.disabled = true;
     btn.textContent = "Generating...";
-    chrome.runtime.sendMessage(
-      { type: "JOBAPPLIER_GENERATE_ANSWER", question: questionText, notes: notesInput.value.trim() },
-      (response) => {
-        if (chrome.runtime.lastError || !response || response.error) {
-          btn.textContent = "Failed - retry";
+    safeCall(() => {
+      chrome.runtime.sendMessage(
+        { type: "JOBAPPLIER_GENERATE_ANSWER", question: questionText, notes: notesInput.value.trim() },
+        (response) => {
+          if (chrome.runtime.lastError || !response || response.error) {
+            btn.textContent = "Failed - retry";
+            btn.disabled = false;
+            return;
+          }
+          textarea.value = response.answer;
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.dispatchEvent(new Event("change", { bubbles: true }));
+          btn.textContent = "✨ Regenerate";
           btn.disabled = false;
-          return;
         }
-        textarea.value = response.answer;
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-        textarea.dispatchEvent(new Event("change", { bubbles: true }));
-        btn.textContent = "✨ Regenerate";
-        btn.disabled = false;
-      }
-    );
+      );
+    });
+    if (contextInvalidated) {
+      btn.textContent = "Reload this page to use AI answer";
+      btn.disabled = true;
+    }
   });
 
   row.appendChild(btn);
@@ -185,14 +218,16 @@ function injectAnswerButton(textarea, questionText) {
 }
 
 function scanForEssayQuestions() {
-  chrome.storage.local.get("jobapplier_current_job", (data) => {
-    if (!data.jobapplier_current_job) return; // no job being tracked - nothing to answer from
-    document.querySelectorAll("textarea").forEach((textarea) => {
-      if (textarea.dataset.jobapplierIconAdded) return;
-      if (textarea.offsetHeight < 40 || textarea.offsetWidth < 100) return; // skip tiny/hidden ones
-      const questionText = resolveLabelText(textarea);
-      if (!questionText || isSkippableQuestion(questionText)) return;
-      injectAnswerButton(textarea, questionText);
+  safeCall(() => {
+    chrome.storage.local.get("jobapplier_current_job", (data) => {
+      if (!data.jobapplier_current_job) return; // no job being tracked - nothing to answer from
+      document.querySelectorAll("textarea").forEach((textarea) => {
+        if (textarea.dataset.jobapplierIconAdded) return;
+        if (textarea.offsetHeight < 40 || textarea.offsetWidth < 100) return; // skip tiny/hidden ones
+        const questionText = resolveLabelText(textarea);
+        if (!questionText || isSkippableQuestion(questionText)) return;
+        injectAnswerButton(textarea, questionText);
+      });
     });
   });
 }
@@ -202,7 +237,6 @@ scanForEssayQuestions();
 
 // Most application forms are SPAs that render fields after the initial page load - a single
 // document_idle pass would miss those, so keep watching for new textareas showing up.
-new MutationObserver(() => scanForEssayQuestions()).observe(document.documentElement, {
-  childList: true, subtree: true,
-});
+widgetObserver = new MutationObserver(() => scanForEssayQuestions());
+widgetObserver.observe(document.documentElement, { childList: true, subtree: true });
 }
