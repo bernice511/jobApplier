@@ -5,12 +5,14 @@ Run with: PYTHONPATH=src DYLD_LIBRARY_PATH=/opt/homebrew/lib python3 -m jobappli
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
 
 from jobapplier.common import resume_parser, resume_store, screening_answers
+from jobapplier.common.claude_cli import ClaudeCLIError, call_claude
 from jobapplier.common.config import GENERATED_DIR, RESUME_DIR, load_config
 from jobapplier.job_alerts import adzuna_source as job_alerts_adzuna_source
 from jobapplier.job_alerts import jooble_source as job_alerts_jooble_source
@@ -365,6 +367,77 @@ def api_tailor():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify(_with_filenames(record))
+
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _resume_sections_to_text(resume: dict) -> str:
+    """Flattens the master resume's parsed {"sections": [...]} schema (see
+    common/resume_parser.py's SCHEMA_INSTRUCTIONS) into plain text for a Claude prompt -
+    fallback context when the caller doesn't have a JD-tailored resume_preview_html yet."""
+    lines = [resume.get("name", ""), resume.get("tagline") or ""]
+    for section in resume.get("sections", []):
+        lines.append(section.get("title", "").upper())
+        if section.get("type") == "paragraph":
+            lines.append(section.get("content", ""))
+        elif section.get("type") == "skills":
+            for cat in section.get("categories", []):
+                lines.append(f"{cat.get('name', '')}: {', '.join(cat.get('items', []))}")
+        elif section.get("type") == "entries":
+            for entry in section.get("entries", []):
+                lines.append(entry.get("header_left_bold", ""))
+                lines.extend(entry.get("bullets", []))
+                for sub in entry.get("subentries", []):
+                    lines.append(sub.get("header_left_bold", ""))
+                    lines.extend(sub.get("bullets", []))
+    return "\n".join(line for line in lines if line)
+
+
+@app.post("/api/answer-question")
+def api_answer_question():
+    """Generates a first-person answer for one free-response application question, using
+    whatever JD/resume context is available - called by the extension's floating widget
+    (floating_widget.js, via background.js) so an essay-type question can be answered in place
+    without the side panel needing to be open. resume_preview_html is the JD-tailored resume if
+    one's already been generated for this job; falls back to the plain active resume otherwise."""
+    body = request.get_json(silent=True) or {}
+    question = body.get("question", "").strip()
+    if not question:
+        return jsonify({"error": "question is required."}), 400
+    jd_text = body.get("jd_text", "").strip()
+    resume_preview_html = body.get("resume_preview_html", "").strip()
+
+    if resume_preview_html:
+        resume_text = _HTML_TAG_RE.sub(" ", resume_preview_html)
+    else:
+        active = resume_store.get_active()
+        if active is None:
+            resume_text = ""
+        else:
+            resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
+            resume_text = _resume_sections_to_text(resume)
+
+    prompt = f"""You are helping a candidate answer a free-response question on a job application.
+
+Job description:
+{jd_text or "(not available)"}
+
+Candidate's resume:
+{resume_text or "(not available)"}
+
+Application question:
+{question}
+
+Write a concise, specific, first-person answer (2-4 sentences) that this candidate would
+submit for this application question, grounded in their actual resume and this specific job.
+No generic filler, no placeholder brackets, no preamble - just the answer text itself."""
+
+    try:
+        answer = call_claude(prompt)
+    except ClaudeCLIError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"answer": answer.strip()})
 
 
 @app.post("/api/review-session")

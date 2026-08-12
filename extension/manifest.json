@@ -29,6 +29,12 @@
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["floating_widget.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "action": {
