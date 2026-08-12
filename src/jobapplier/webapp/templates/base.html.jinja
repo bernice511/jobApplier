@@ -293,32 +293,39 @@
        pastelTint()) with the match score as a floating ring badge, matching the browse-jobs
        card grid reference. Laid out as a multi-column grid, not a stacked list. */
     .job-card-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem; margin-top: 1rem;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 0.8rem; margin-top: 1rem;
     }
     .job-card {
       display: flex; flex-direction: column;
-      border-radius: 16px; padding: 1rem 1.1rem 0.9rem;
+      border-radius: 14px; padding: 0.8rem 0.85rem 0.75rem;
     }
-    .job-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.9rem; }
+    .job-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
     .job-card-main { flex: 1; min-width: 0; }
-    .job-card-main .meta { font-weight: 700; font-size: 0.95rem; color: var(--text-1); }
-    .job-card-main .sub { color: var(--text-2); opacity: 0.75; font-size: 0.8rem; margin: 2px 0 0.6rem; }
+    .job-card-main .meta {
+      font-weight: 700; font-size: 0.85rem; color: var(--text-1); line-height: 1.25;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .job-card-main .sub { color: var(--text-2); opacity: 0.75; font-size: 0.72rem; margin: 3px 0 0.5rem; }
     .job-card-main .downloads { margin-top: 0.7rem; display: flex; gap: 0.5rem; }
-    .job-card-main .chip-row { margin: 0 0 0.2rem; }
-    .job-card-main .chip { background: rgba(255,255,255,0.55); }
+    .job-card-main .chip-row { margin: 0 0 0.2rem; gap: 0.3rem; }
+    .job-card-main .chip {
+      background: rgba(255,255,255,0.55); font-size: 0.7rem; padding: 0.2rem 0.55rem;
+    }
     :root[data-theme="dark"] .job-card-main .chip { background: rgba(255,255,255,0.08); }
     .job-card-score {
-      flex: none; width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--accent);
+      flex: none; width: 44px; height: 44px; border-radius: 50%; border: 2.5px solid var(--accent);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; background: rgba(255,255,255,0.55);
     }
     :root[data-theme="dark"] .job-card-score { background: rgba(255,255,255,0.06); }
-    .job-card-score-value { font-size: 0.9rem; font-weight: 700; line-height: 1; }
-    .job-card-score-value .job-card-score-sub { font-size: 0.6rem; font-weight: 500; opacity: 0.7; }
-    .job-card-score-label { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
-    .job-card-actions { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
-    .job-card-actions .pill-link, .job-card-actions button.secondary { flex: 1; justify-content: center; }
+    .job-card-score-value { font-size: 0.78rem; font-weight: 700; line-height: 1; }
+    .job-card-score-value .job-card-score-sub { font-size: 0.52rem; font-weight: 500; opacity: 0.7; }
+    .job-card-score-label { font-size: 0.42rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+    .job-card-actions { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
+    .job-card-actions .pill-link, .job-card-actions button.secondary {
+      flex: 1; justify-content: center; font-size: 0.78rem; padding: 0.35rem 0.6rem;
+    }
     .job-card-actions button.secondary { background: rgba(255,255,255,0.6); color: var(--text-1); }
     :root[data-theme="dark"] .job-card-actions button.secondary { background: rgba(255,255,255,0.08); color: var(--text-1); }
   </style>
