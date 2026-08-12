@@ -1,11 +1,32 @@
 {% extends "base.html.jinja" %}
 
 {% block content %}
+<style>
+  .alerts-filter-row { display: flex; gap: 0.6rem; margin: 1rem 0 0; }
+  .alerts-filter-row input {
+    flex: 1; padding: 0.6rem 0.9rem; font-size: 0.9rem; color: var(--text-1);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; outline: none;
+  }
+  .alerts-filter-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+  .alerts-filter-row select {
+    padding: 0.6rem 0.9rem; font-size: 0.9rem; color: var(--text-1); font-family: inherit;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; outline: none; cursor: pointer;
+  }
+</style>
 <h2>Job alerts</h2>
 <p class="hint">New listings found by the background job-alert pipeline that score well
   against your resume. Refreshed automatically a few times a day.</p>
+<div class="alerts-filter-row">
+  <input id="alerts-filter-input" type="text" placeholder="Filter by company, title, or location...">
+  <select id="alerts-score-filter">
+    <option value="0">Any score</option>
+    <option value="8">8+ Strong</option>
+    <option value="6">6+ Good</option>
+    <option value="4">4+ Fair</option>
+  </select>
+</div>
 <div id="alerts-list" class="job-card-grid"></div>
-<div id="alerts-empty" class="hint" style="display:none;">No new matches right now - check back later.</div>
+<div id="alerts-empty" class="hint" style="display:none;">No matches - try a different filter.</div>
 <div id="alerts-pagination" class="pagination"></div>
 {% endblock %}
 
@@ -15,8 +36,21 @@
   const alertsList = document.getElementById('alerts-list');
   const alertsEmpty = document.getElementById('alerts-empty');
   const alertsPagination = document.getElementById('alerts-pagination');
+  const filterInput = document.getElementById('alerts-filter-input');
+  const scoreFilter = document.getElementById('alerts-score-filter');
   let allAlerts = [];
   let currentPage = 1;
+
+  function filteredAlerts() {
+    const minScore = Number(scoreFilter.value) || 0;
+    const tokens = filterInput.value.trim().toLowerCase().split(/\s+/).filter((t) => t.length > 0);
+    return allAlerts.filter((job) => {
+      if (minScore && !(job.match_score >= minScore)) return false;
+      if (!tokens.length) return true;
+      const haystack = `${job.title} ${job.company} ${job.location || ''}`.toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
+  }
 
   // Compact cards in a grid don't have room for every matched/suggested keyword - show the
   // top few and fold the rest into a "+N more" chip, same pattern as the mockup.
@@ -63,13 +97,13 @@
     });
     if (!resp.ok) return;
     allAlerts = allAlerts.filter((job) => job.job_id !== jobId);
-    const maxPage = Math.max(1, Math.ceil(allAlerts.length / PAGE_SIZE));
+    const maxPage = Math.max(1, Math.ceil(filteredAlerts().length / PAGE_SIZE));
     if (currentPage > maxPage) currentPage = maxPage;
     renderPage();
   }
 
-  function renderPagination() {
-    const totalPages = Math.ceil(allAlerts.length / PAGE_SIZE);
+  function renderPagination(count) {
+    const totalPages = Math.ceil(count / PAGE_SIZE);
     alertsPagination.innerHTML = '';
     if (totalPages <= 1) return;
 
@@ -91,16 +125,28 @@
 
   function renderPage() {
     alertsList.innerHTML = '';
-    if (!allAlerts.length) {
+    const list = filteredAlerts();
+    if (!list.length) {
+      alertsEmpty.textContent = allAlerts.length
+        ? 'No matches - try a different filter.'
+        : 'No new matches right now - check back later.';
       alertsEmpty.style.display = '';
       alertsPagination.innerHTML = '';
       return;
     }
     alertsEmpty.style.display = 'none';
     const start = (currentPage - 1) * PAGE_SIZE;
-    allAlerts.slice(start, start + PAGE_SIZE).forEach((job, i) => alertsList.appendChild(renderAlertCard(job, i)));
-    renderPagination();
+    list.slice(start, start + PAGE_SIZE).forEach((job, i) => alertsList.appendChild(renderAlertCard(job, i)));
+    renderPagination(list.length);
   }
+
+  function onFilterChange() {
+    currentPage = 1;
+    renderPage();
+  }
+
+  filterInput.addEventListener('input', onFilterChange);
+  scoreFilter.addEventListener('change', onFilterChange);
 
   async function loadAlerts() {
     const resp = await fetch('/api/alerts');
