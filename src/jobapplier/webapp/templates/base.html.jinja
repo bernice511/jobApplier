@@ -293,8 +293,8 @@
        pastelTint()) with the match score as a floating ring badge, matching the browse-jobs
        card grid reference. Laid out as a multi-column grid, not a stacked list. */
     .job-card-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-      gap: 0.8rem; margin-top: 1rem;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.7rem; margin-top: 1rem;
     }
     .job-card {
       display: flex; flex-direction: column;
@@ -313,18 +313,23 @@
       background: rgba(255,255,255,0.55); font-size: 0.7rem; padding: 0.2rem 0.55rem;
     }
     :root[data-theme="dark"] .job-card-main .chip { background: rgba(255,255,255,0.08); }
+    /* A radial progress ring (conic-gradient fill, not a fixed-weight border) sized to the
+       score out of 10 - the fill amount plus its color both carry the "how strong" signal, so
+       no separate STRONG/GOOD/FAIR/WEAK caption is needed inside the small tile. */
     .job-card-score {
-      flex: none; width: 44px; height: 44px; border-radius: 50%; border: 2.5px solid var(--accent);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      text-align: center; background: rgba(255,255,255,0.55);
+      flex: none; width: 40px; height: 40px; border-radius: 50%; padding: 3px;
     }
-    :root[data-theme="dark"] .job-card-score { background: rgba(255,255,255,0.06); }
-    .job-card-score-value { font-size: 0.78rem; font-weight: 700; line-height: 1; }
-    .job-card-score-value .job-card-score-sub { font-size: 0.52rem; font-weight: 500; opacity: 0.7; }
-    .job-card-score-label { font-size: 0.42rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+    .job-card-score-inner {
+      width: 100%; height: 100%; border-radius: 50%; background: rgba(255,255,255,0.92);
+      display: flex; align-items: center; justify-content: center;
+    }
+    :root[data-theme="dark"] .job-card-score-inner { background: rgba(20,25,25,0.85); }
+    .job-card-score-value { font-size: 0.72rem; font-weight: 700; line-height: 1; color: var(--text-1); }
+    .job-card-score-value .job-card-score-sub { font-size: 0.5rem; font-weight: 500; opacity: 0.6; }
     .job-card-actions { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
     .job-card-actions .pill-link, .job-card-actions button.secondary {
       flex: 1; justify-content: center; font-size: 0.78rem; padding: 0.35rem 0.6rem;
+      white-space: nowrap;
     }
     .job-card-actions button.secondary { background: rgba(255,255,255,0.6); color: var(--text-1); }
     :root[data-theme="dark"] .job-card-actions button.secondary { background: rgba(255,255,255,0.08); color: var(--text-1); }
@@ -417,22 +422,18 @@
       `;
     }
 
-    function matchLabel(score) {
-      if (score >= 8) return 'STRONG MATCH';
-      if (score >= 6) return 'GOOD MATCH';
-      if (score >= 4) return 'FAIR MATCH';
-      return 'WEAK MATCH';
-    }
-
-    // Used by job-list cards (alerts) instead of statTileHtml() - a floating ring badge meant
-    // to sit in the corner of a pastel card, not a bar inside it.
+    // Used by job-list cards (alerts) instead of statTileHtml() - a small radial progress
+    // ring meant to sit in the corner of a pastel card, not a bar inside it. The fill amount
+    // (score/10 as a conic-gradient sweep) plus its color both carry the "how strong" signal.
     function matchScorePanelHtml(score) {
       if (score === undefined || score === null || score === '') return '';
       const color = scoreColor(score);
+      const pct = Math.max(0, Math.min(10, score)) * 10;
       return `
-        <div class="job-card-score" style="border-color:${color};">
-          <div class="job-card-score-value">${score}<span class="job-card-score-sub">/10</span></div>
-          <div class="job-card-score-label" style="color:${color};">${matchLabel(score)}</div>
+        <div class="job-card-score" style="background: conic-gradient(${color} ${pct}%, var(--gridline) 0);">
+          <div class="job-card-score-inner">
+            <div class="job-card-score-value">${score}<span class="job-card-score-sub">/10</span></div>
+          </div>
         </div>
       `;
     }

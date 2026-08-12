@@ -11,7 +11,7 @@
 
 {% block scripts %}
 <script>
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 18;
   const alertsList = document.getElementById('alerts-list');
   const alertsEmpty = document.getElementById('alerts-empty');
   const alertsPagination = document.getElementById('alerts-pagination');
@@ -48,7 +48,7 @@
       </div>
       <div class="job-card-actions">
         <button class="secondary dismiss-btn">Dismiss</button>
-        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
+        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View</a>
       </div>
     `;
     div.querySelector('.dismiss-btn').addEventListener('click', () => dismiss(job.job_id));
