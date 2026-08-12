@@ -1,14 +1,12 @@
 {% extends "base.html.jinja" %}
 
 {% block content %}
-<div class="card">
-  <h2>Job alerts</h2>
-  <p class="hint">New listings found by the background job-alert pipeline that score well
-    against your resume. Refreshed automatically a few times a day.</p>
-  <div id="alerts-list"></div>
-  <div id="alerts-empty" class="hint" style="display:none;">No new matches right now - check back later.</div>
-  <div id="alerts-pagination" class="pagination"></div>
-</div>
+<h2>Job alerts</h2>
+<p class="hint">New listings found by the background job-alert pipeline that score well
+  against your resume. Refreshed automatically a few times a day.</p>
+<div id="alerts-list" class="job-card-grid"></div>
+<div id="alerts-empty" class="hint" style="display:none;">No new matches right now - check back later.</div>
+<div id="alerts-pagination" class="pagination"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -20,16 +18,19 @@
   let allAlerts = [];
   let currentPage = 1;
 
+  // Compact cards in a grid don't have room for every matched/suggested keyword - show the
+  // top few and fold the rest into a "+N more" chip, same pattern as the mockup.
+  const MAX_VISIBLE_TAGS = 3;
+
   function keywordChips(matched, suggested) {
-    let html = '';
-    (matched || []).forEach((term) => {
-      html += `<span class="chip">${term}</span>`;
-    });
-    (suggested || []).forEach((kw) => {
-      const title = (kw.based_on || '').replace(/"/g, '&quot;');
-      html += `<span class="chip" title="${title}">${kw.term} (possible)</span>`;
-    });
-    return html ? `<div class="chip-row">${html}</div>` : '';
+    const terms = [...(matched || [])];
+    (suggested || []).forEach((kw) => terms.push(`${kw.term} (possible)`));
+    if (!terms.length) return '';
+    const visible = terms.slice(0, MAX_VISIBLE_TAGS);
+    const remaining = terms.length - visible.length;
+    let html = visible.map((term) => `<span class="chip">${term}</span>`).join('');
+    if (remaining > 0) html += `<span class="chip">+${remaining} more</span>`;
+    return `<div class="chip-row">${html}</div>`;
   }
 
   function renderAlertCard(job, index) {

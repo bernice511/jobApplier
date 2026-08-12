@@ -291,11 +291,14 @@
 
     /* Job-list cards (alerts) - a rotating pastel background (set inline per card, see
        pastelTint()) with the match score as a floating ring badge, matching the browse-jobs
-       card grid reference. */
+       card grid reference. Laid out as a multi-column grid, not a stacked list. */
+    .job-card-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem; margin-top: 1rem;
+    }
     .job-card {
       display: flex; flex-direction: column;
       border-radius: 16px; padding: 1rem 1.1rem 0.9rem;
-      margin-bottom: 0.9rem;
     }
     .job-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.9rem; }
     .job-card-main { flex: 1; min-width: 0; }
