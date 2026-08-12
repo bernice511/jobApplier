@@ -12,6 +12,9 @@
     padding: 0.6rem 0.9rem; font-size: 0.9rem; color: var(--text-1); font-family: inherit;
     background: var(--surface); border: 1px solid var(--border); border-radius: 999px; outline: none; cursor: pointer;
   }
+  .alerts-filter-row button.secondary { white-space: nowrap; }
+  #live-search-section { margin-top: 1.8rem; }
+  #live-search-section h2 { font-size: 1rem; margin: 0 0 0.2rem; }
 </style>
 <h2>Job alerts</h2>
 <p class="hint">New listings found by the background job-alert pipeline that score well
@@ -24,10 +27,17 @@
     <option value="6">6+ Good</option>
     <option value="4">4+ Fair</option>
   </select>
+  <button class="secondary" id="search-adzuna-btn" type="button">Search Adzuna</button>
 </div>
 <div id="alerts-list" class="job-card-grid"></div>
 <div id="alerts-empty" class="hint" style="display:none;">No matches - try a different filter.</div>
 <div id="alerts-pagination" class="pagination"></div>
+
+<div id="live-search-section" style="display:none;">
+  <h2>Live results from Adzuna</h2>
+  <p class="hint" id="live-search-status"></p>
+  <div id="live-results-list" class="job-card-grid"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -147,6 +157,97 @@
 
   filterInput.addEventListener('input', onFilterChange);
   scoreFilter.addEventListener('change', onFilterChange);
+
+  // --- Live search against Adzuna directly, independent of the stored/scored alerts above.
+  // Results come back unscored (fast) - each card gets an "Analyze match" button that scores
+  // it on demand via /api/analyze, same as the Tailor page, instead of scoring a whole page
+  // of results up front (which would mean a claude CLI call per result before anything shows).
+  const searchAdzunaBtn = document.getElementById('search-adzuna-btn');
+  const liveSearchSection = document.getElementById('live-search-section');
+  const liveSearchStatus = document.getElementById('live-search-status');
+  const liveResultsList = document.getElementById('live-results-list');
+
+  function renderLiveResultCard(job, index) {
+    const div = document.createElement('div');
+    div.className = 'job-card';
+    div.style.background = pastelTint(index);
+    div.innerHTML = `
+      <div class="job-card-top">
+        <div class="job-card-main">
+          <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
+          <div class="sub">Posted ${job.posted_date ? job.posted_date.slice(0, 10) : ''}</div>
+        </div>
+        <div class="live-score-slot"></div>
+      </div>
+      <div class="job-card-actions">
+        <button class="secondary analyze-btn">Analyze match</button>
+        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View</a>
+      </div>
+    `;
+    const analyzeBtn = div.querySelector('.analyze-btn');
+    const scoreSlot = div.querySelector('.live-score-slot');
+    analyzeBtn.addEventListener('click', async () => {
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = 'Analyzing...';
+      try {
+        const resp = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jd_text: job.description }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          analyzeBtn.textContent = 'Failed - retry';
+          analyzeBtn.disabled = false;
+          return;
+        }
+        scoreSlot.innerHTML = matchScorePanelHtml(data.match_score);
+        analyzeBtn.remove();
+      } catch (e) {
+        analyzeBtn.textContent = 'Failed - retry';
+        analyzeBtn.disabled = false;
+      }
+    });
+    return div;
+  }
+
+  async function searchAdzuna() {
+    const query = filterInput.value.trim();
+    if (!query) {
+      liveSearchSection.style.display = '';
+      liveResultsList.innerHTML = '';
+      liveSearchStatus.textContent = 'Type something in the filter box above first, then click Search Adzuna.';
+      return;
+    }
+    liveSearchSection.style.display = '';
+    liveResultsList.innerHTML = '';
+    searchAdzunaBtn.disabled = true;
+    liveSearchStatus.textContent = `Searching Adzuna for "${query}"...`;
+    try {
+      const resp = await fetch(`/api/alerts/search?q=${encodeURIComponent(query)}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        liveSearchStatus.textContent = data.error || 'Search failed.';
+        return;
+      }
+      const results = data.results || [];
+      if (!results.length) {
+        liveSearchStatus.textContent = `No live results for "${query}".`;
+        return;
+      }
+      liveSearchStatus.textContent = `${results.length} result${results.length === 1 ? '' : 's'} for "${query}" - not yet scored against your resume.`;
+      results.forEach((job, i) => liveResultsList.appendChild(renderLiveResultCard(job, i)));
+    } catch (e) {
+      liveSearchStatus.textContent = `Search failed: ${e}`;
+    } finally {
+      searchAdzunaBtn.disabled = false;
+    }
+  }
+
+  searchAdzunaBtn.addEventListener('click', searchAdzuna);
+  filterInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') searchAdzuna();
+  });
 
   async function loadAlerts() {
     const resp = await fetch('/api/alerts');
