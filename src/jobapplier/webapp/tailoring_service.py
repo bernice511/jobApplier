@@ -465,6 +465,7 @@ def tailor_from_jd(
     matched_keyword_count: int = 0,
     suggested_keyword_count: int = 0,
     core_requirement_count: int = 0,
+    source: str = "",
 ) -> dict:
     """Generates the resume and/or cover letter for a job already identified by analyze_jd().
     When generate="both", the two calls run concurrently instead of as one merged call.
@@ -533,6 +534,7 @@ def tailor_from_jd(
         "resume_path": "",
         "cover_letter_path": "",
         "match_score": match_score,
+        "source": source,
     }
     extra = {"changes": [], "resume_preview_html": ""}
 

@@ -45,6 +45,11 @@ def search_page():
     return render_template("search.html.jinja", active_page="search")
 
 
+@app.get("/analytics")
+def analytics_page():
+    return render_template("analytics.html.jinja", active_page="analytics")
+
+
 @app.get("/resume")
 def resume_page():
     return render_template("resume.html.jinja", active_page="resume")
@@ -245,6 +250,7 @@ def api_tailor():
     matched_keyword_count = body.get("matched_keyword_count", 0)
     suggested_keyword_count = body.get("suggested_keyword_count", 0)
     core_requirement_count = body.get("core_requirement_count", 0)
+    source = body.get("source", "").strip()
 
     if not jd_text or not company or not title:
         return jsonify({"error": "Run analyze first - missing jd_text/company/title."}), 400
@@ -258,6 +264,7 @@ def api_tailor():
             matched_keyword_count=matched_keyword_count,
             suggested_keyword_count=suggested_keyword_count,
             core_requirement_count=core_requirement_count,
+            source=source,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

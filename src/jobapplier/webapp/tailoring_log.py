@@ -23,7 +23,7 @@ TAILORING_LOG_CSV = DATA_DIR / "tailoring_log.csv"
 FIELDNAMES = [
     "timestamp", "company", "title", "location",
     "resume_path", "cover_letter_path", "match_score",
-    "applied", "date_applied", "status", "tags",
+    "applied", "date_applied", "status", "tags", "source",
 ]
 
 # Order matters - this is the left-to-right column order of the Kanban board.
@@ -112,6 +112,7 @@ def load_records() -> list[dict]:
         row["applied"] = row.get("applied") == "True"
         row["status"] = row.get("status") or "saved"
         row["tags"] = _parse_tags(row.get("tags", ""))
+        row["source"] = row.get("source") or "Unknown"
     return rows
 
 

@@ -98,6 +98,25 @@ function jobIdentity(job) {
   return job && (job.id || job.url);
 }
 
+// Human-readable label for the Analytics page's source-breakdown chart - just a hostname match
+// against the same sites content.js already has dedicated extractors for, falling back to the
+// raw hostname for anything else rather than guessing at a name for an unrecognized site.
+function sourceFromUrl(url) {
+  if (!url) return "";
+  let hostname;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return "";
+  }
+  if (hostname.endsWith("linkedin.com")) return "LinkedIn";
+  if (hostname.endsWith("indeed.com")) return "Indeed";
+  if (hostname.includes("greenhouse.io")) return "Greenhouse";
+  if (hostname.includes("lever.co")) return "Lever";
+  if (hostname.includes("myworkdayjobs.com")) return "Workday";
+  return hostname.replace(/^www\./, "");
+}
+
 // Persists analysis + generated-resume results per job (chrome.storage.local, so it survives
 // closing/reopening the panel and even a browser restart) - so revisiting a job you've already
 // analyzed/generated for shows everything immediately, instead of waiting on a fresh
@@ -416,6 +435,7 @@ async function generateTailored(notes) {
     matched_keyword_count: (currentAnalysis.matched_keywords || []).length,
     suggested_keyword_count: (currentAnalysis.suggested_keywords || []).length,
     core_requirement_count: currentAnalysis.core_requirement_count || 0,
+    source: sourceFromUrl(currentJob && currentJob.url),
   };
 
   generateResult.innerHTML = "";
