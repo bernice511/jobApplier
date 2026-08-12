@@ -315,6 +315,20 @@ def api_applications_set_status():
     return jsonify({"ok": True})
 
 
+@app.post("/api/applications/set_tags")
+def api_applications_set_tags():
+    body = request.get_json(silent=True) or {}
+    record_key = body.get("record_key", "").strip()
+    tags = body.get("tags", [])
+    if not record_key:
+        return jsonify({"error": "record_key is required."}), 400
+    if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+        return jsonify({"error": "tags must be a list of strings."}), 400
+    if not tailoring_log.set_tags(record_key, tags):
+        return jsonify({"error": "Unknown record_key."}), 404
+    return jsonify({"ok": True})
+
+
 def _with_filenames(record: dict) -> dict:
     return {
         **record,

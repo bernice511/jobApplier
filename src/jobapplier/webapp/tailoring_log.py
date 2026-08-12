@@ -23,7 +23,7 @@ TAILORING_LOG_CSV = DATA_DIR / "tailoring_log.csv"
 FIELDNAMES = [
     "timestamp", "company", "title", "location",
     "resume_path", "cover_letter_path", "match_score",
-    "applied", "date_applied", "status",
+    "applied", "date_applied", "status", "tags",
 ]
 
 # Order matters - this is the left-to-right column order of the Kanban board.
@@ -36,6 +36,32 @@ def _record_key(record: dict) -> str:
     it doubles as a stable key for toggling applied-status without adding a new column."""
     path = record.get("resume_path") or record.get("cover_letter_path") or ""
     return Path(path).stem
+
+
+def _parse_tags(raw: str) -> list[str]:
+    return [t.strip() for t in (raw or "").split(",") if t.strip()]
+
+
+def _format_tags(tags: list[str]) -> str:
+    # Commas are the field's own separator - stripped from individual tags rather than
+    # building CSV-style quoting/escaping for what's meant to be short single-word-ish labels.
+    return ",".join(t.strip().replace(",", "") for t in tags if t.strip())
+
+
+def _load_raw_rows() -> list[dict]:
+    _migrate_if_needed()
+    if not TAILORING_LOG_CSV.exists():
+        return []
+    with open(TAILORING_LOG_CSV, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _rewrite_rows(rows: list[dict]) -> None:
+    with open(TAILORING_LOG_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in FIELDNAMES})
 
 
 def _migrate_if_needed() -> None:
@@ -80,15 +106,12 @@ def append_record(record: dict) -> None:
 
 
 def load_records() -> list[dict]:
-    _migrate_if_needed()
-    if not TAILORING_LOG_CSV.exists():
-        return []
-    with open(TAILORING_LOG_CSV, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    rows = _load_raw_rows()
     for row in rows:
         row["record_key"] = _record_key(row)
         row["applied"] = row.get("applied") == "True"
         row["status"] = row.get("status") or "saved"
+        row["tags"] = _parse_tags(row.get("tags", ""))
     return rows
 
 
@@ -103,11 +126,9 @@ def set_status(record_key: str, status: str) -> bool:
     card."""
     if status not in STATUSES:
         return False
-    _migrate_if_needed()
-    if not TAILORING_LOG_CSV.exists():
+    rows = _load_raw_rows()
+    if not rows:
         return False
-    with open(TAILORING_LOG_CSV, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
 
     found = False
     for row in rows:
@@ -121,9 +142,24 @@ def set_status(record_key: str, status: str) -> bool:
             found = True
 
     if found:
-        with open(TAILORING_LOG_CSV, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-            writer.writeheader()
-            for row in rows:
-                writer.writerow({field: row.get(field, "") for field in FIELDNAMES})
+        _rewrite_rows(rows)
+    return found
+
+
+def set_tags(record_key: str, tags: list[str]) -> bool:
+    """Replaces a record's full tag set (not an add/remove delta) - the caller (the Kanban
+    board's tag editor) always has the complete current list already, so there's no
+    concurrent-editor race to reconcile here."""
+    rows = _load_raw_rows()
+    if not rows:
+        return False
+
+    found = False
+    for row in rows:
+        if _record_key(row) == record_key:
+            row["tags"] = _format_tags(tags)
+            found = True
+
+    if found:
+        _rewrite_rows(rows)
     return found

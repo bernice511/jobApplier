@@ -5,8 +5,9 @@
   <h2>Applications</h2>
   <p class="hint">Every resume/cover letter you've generated from a pasted JD, organized by
     where it stands - drag a card to a different column, or use its "Move to" menu.</p>
-  <input id="filter-input" type="text" placeholder="Filter by company, title, or location..."
+  <input id="filter-input" type="text" placeholder="Filter by company, title, location, or tag..."
     style="width:100%; padding:0.6rem 0.9rem; font-size:0.9rem; color:var(--text-1); background:var(--page); border:1px solid var(--border); border-radius:999px; outline:none;">
+  <div id="tag-filter-bar" class="chip-row" style="margin-top:0.6rem;"></div>
 </div>
 
 <div class="kanban-board" id="kanban-board"></div>
@@ -43,6 +44,24 @@
     width: 100%; margin-top: 0.4rem; font-size: 0.78rem; padding: 0.3rem 0.4rem;
     border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-1);
   }
+  .kanban-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.4rem 0; }
+  .kanban-tag {
+    font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px;
+    background: var(--accent-wash); color: var(--accent); display: inline-flex; align-items: center; gap: 0.25rem;
+  }
+  .kanban-tag button {
+    all: unset; cursor: pointer; font-size: 0.75rem; line-height: 1; color: var(--accent);
+  }
+  .kanban-tag-add {
+    font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px dashed var(--border);
+    background: none; color: var(--text-muted); cursor: pointer;
+  }
+  .kanban-tag-input {
+    font-size: 0.72rem; padding: 0.15rem 0.4rem; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-1); width: 90px;
+  }
+  #tag-filter-bar .chip { cursor: pointer; }
+  #tag-filter-bar .chip.active { background: var(--accent); color: var(--button-ink); }
   @media (max-width: 900px) { .kanban-column { flex-basis: 220px; } }
 </style>
 <script>
@@ -57,14 +76,32 @@
   ];
 
   const filterInput = document.getElementById('filter-input');
+  const tagFilterBar = document.getElementById('tag-filter-bar');
   const board = document.getElementById('kanban-board');
   const appEmpty = document.getElementById('app-empty');
   let allApplications = [];
+  let activeTagFilter = null;
 
   function matchesFilter(record, tokens) {
+    if (activeTagFilter && !(record.tags || []).includes(activeTagFilter)) return false;
     if (!tokens.length) return true;
-    const haystack = `${record.company} ${record.title} ${record.location || ''}`.toLowerCase();
+    const haystack = `${record.company} ${record.title} ${record.location || ''} ${(record.tags || []).join(' ')}`.toLowerCase();
     return tokens.every((t) => haystack.includes(t));
+  }
+
+  function renderTagFilterBar() {
+    const allTags = [...new Set(allApplications.flatMap((r) => r.tags || []))].sort();
+    tagFilterBar.innerHTML = '';
+    allTags.forEach((tag) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip' + (tag === activeTagFilter ? ' active' : '');
+      chip.textContent = tag;
+      chip.addEventListener('click', () => {
+        activeTagFilter = activeTagFilter === tag ? null : tag;
+        renderBoard();
+      });
+      tagFilterBar.appendChild(chip);
+    });
   }
 
   function renderCard(record) {
@@ -87,8 +124,48 @@
       <div class="sub">${record.company}${record.location ? ' - ' + record.location : ''}</div>
       ${scoreBadge}
       <div class="downloads">${downloads}</div>
+      <div class="kanban-tags"></div>
       <select class="move-select"></select>
     `;
+
+    const tagsDiv = div.querySelector('.kanban-tags');
+    (record.tags || []).forEach((tag) => {
+      const chip = document.createElement('span');
+      chip.className = 'kanban-tag';
+      chip.innerHTML = `${tag} <button type="button" title="Remove tag">&times;</button>`;
+      chip.querySelector('button').addEventListener('click', (e) => {
+        e.stopPropagation();
+        setTags(record, record.tags.filter((t) => t !== tag));
+      });
+      tagsDiv.appendChild(chip);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'kanban-tag-add';
+    addBtn.textContent = '+ tag';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.className = 'kanban-tag-input';
+      input.placeholder = 'tag name';
+      addBtn.replaceWith(input);
+      input.focus();
+      input.addEventListener('click', (ev) => ev.stopPropagation());
+      const commit = () => {
+        const value = input.value.trim();
+        if (value && !(record.tags || []).includes(value)) {
+          setTags(record, [...(record.tags || []), value]);
+        } else {
+          renderBoard();
+        }
+      };
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commit();
+        if (ev.key === 'Escape') renderBoard();
+      });
+      input.addEventListener('blur', commit);
+    });
+    tagsDiv.appendChild(addBtn);
 
     const select = div.querySelector('.move-select');
     STATUSES.forEach(({ key, label }) => {
@@ -107,6 +184,21 @@
     div.addEventListener('dragend', () => div.classList.remove('dragging'));
 
     return div;
+  }
+
+  async function setTags(record, tags) {
+    const previous = record.tags;
+    record.tags = tags; // optimistic - rendered immediately, rolled back below on failure
+    renderBoard();
+    const resp = await fetch('/api/applications/set_tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record_key: record.record_key, tags }),
+    });
+    if (!resp.ok) {
+      record.tags = previous;
+      renderBoard();
+    }
   }
 
   async function setStatus(record, status) {
@@ -129,6 +221,7 @@
     const tokens = query.split(/\s+/).filter((t) => t.length >= 2);
     const filtered = allApplications.filter((r) => matchesFilter(r, tokens));
 
+    renderTagFilterBar();
     appEmpty.style.display = filtered.length ? 'none' : '';
     board.innerHTML = '';
 
