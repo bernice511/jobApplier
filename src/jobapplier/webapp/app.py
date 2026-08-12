@@ -400,13 +400,17 @@ def api_answer_question():
     whatever JD/resume context is available - called by the extension's floating widget
     (floating_widget.js, via background.js) so an essay-type question can be answered in place
     without the side panel needing to be open. resume_preview_html is the JD-tailored resume if
-    one's already been generated for this job; falls back to the plain active resume otherwise."""
+    one's already been generated for this job; falls back to the plain active resume otherwise.
+    notes is optional free-text tweak instructions from the widget's inline input, used for
+    both the first generation and any regenerate that follows (e.g. "mention my internship at
+    X", "keep it under 80 words")."""
     body = request.get_json(silent=True) or {}
     question = body.get("question", "").strip()
     if not question:
         return jsonify({"error": "question is required."}), 400
     jd_text = body.get("jd_text", "").strip()
     resume_preview_html = body.get("resume_preview_html", "").strip()
+    notes = body.get("notes", "").strip()
 
     if resume_preview_html:
         resume_text = _HTML_TAG_RE.sub(" ", resume_preview_html)
@@ -418,6 +422,7 @@ def api_answer_question():
             resume = resume_parser.parse_and_cache(**resume_store.get_active_paths())
             resume_text = _resume_sections_to_text(resume)
 
+    notes_block = f"\n\nAdditional instructions from the candidate:\n{notes}" if notes else ""
     prompt = f"""You are helping a candidate answer a free-response question on a job application.
 
 Job description:
@@ -427,7 +432,7 @@ Candidate's resume:
 {resume_text or "(not available)"}
 
 Application question:
-{question}
+{question}{notes_block}
 
 Write a concise, specific, first-person answer (2-4 sentences) that this candidate would
 submit for this application question, grounded in their actual resume and this specific job.

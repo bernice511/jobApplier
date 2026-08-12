@@ -19,7 +19,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "JOBAPPLIER_GENERATE_ANSWER") {
-    generateAnswer(message.question)
+    generateAnswer(message.question, message.notes)
       .then((answer) => sendResponse({ answer }))
       .catch((err) => sendResponse({ error: String(err) }));
     return true; // keep the message channel open for the async response above
@@ -29,8 +29,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Pulls whatever job/resume context is already known (set by content.js's extraction and
 // panel.js's analyze/generate calls, both via chrome.storage.local) so a question can be
 // answered from the SAME context the side panel already has, without requiring the panel to
-// be open - the floating widget's button works standalone on any application page.
-async function generateAnswer(question) {
+// be open - the floating widget's button works standalone on any application page. notes is
+// optional free-text tweak instructions from the floating widget's inline input (e.g. "mention
+// my internship at X", "keep it under 80 words"), used for both the first generation and any
+// regenerate that follows.
+async function generateAnswer(question, notes) {
   const local = await chrome.storage.local.get(["jobapplier_current_job", JOB_CACHE_STORAGE_KEY]);
   const job = local.jobapplier_current_job;
   const jdText = (job && job.description) || "";
@@ -48,7 +51,7 @@ async function generateAnswer(question) {
   const resp = await fetch(`${BACKEND_URL}/api/answer-question`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, jd_text: jdText, resume_preview_html: resumePreviewHtml }),
+    body: JSON.stringify({ question, jd_text: jdText, resume_preview_html: resumePreviewHtml, notes: notes || "" }),
   });
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || "Failed to generate an answer.");

@@ -47,31 +47,82 @@ function resolveLabelText(field) {
 }
 
 // --- 1. Floating button that opens the side panel ---
+//
+// Hides itself once the panel is actually open (tracked via chrome.storage.local's
+// jobapplier_panel_open, set by panel.js on load/unload) and reappears once it's closed again -
+// no point offering a second way to open something that's already open. A separate small "x"
+// lets the user dismiss the widget entirely (persisted, so it stays gone across page loads).
+
+const PANEL_OPEN_KEY = "jobapplier_panel_open";
+const WIDGET_DISMISSED_KEY = "jobapplier_widget_dismissed";
 
 function injectFloatingButton() {
-  if (document.getElementById("jobapplier-floating-btn")) return;
-  const btn = document.createElement("button");
-  btn.id = "jobapplier-floating-btn";
-  btn.title = "Open jobApplier";
-  btn.type = "button";
-  const img = document.createElement("img");
-  img.src = chrome.runtime.getURL("icons/icon32.png");
-  img.style.width = "22px";
-  img.style.height = "22px";
-  img.style.pointerEvents = "none";
-  btn.appendChild(img);
-  Object.assign(btn.style, {
+  if (document.getElementById("jobapplier-floating-widget")) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.id = "jobapplier-floating-widget";
+  Object.assign(wrapper.style, {
     position: "fixed", top: "50%", right: "0", transform: "translateY(-50%)",
-    zIndex: "2147483647", width: "44px", height: "44px", borderRadius: "50% 0 0 50%",
-    border: "none", background: "#9333ea", cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center",
+    zIndex: "2147483647",
+  });
+
+  const openBtn = document.createElement("button");
+  openBtn.id = "jobapplier-floating-btn";
+  openBtn.title = "Open jobApplier";
+  openBtn.type = "button";
+  openBtn.textContent = "‹"; // ‹ - points toward the page, hinting "opens a panel from here"
+  Object.assign(openBtn.style, {
+    width: "32px", height: "44px", borderRadius: "8px 0 0 8px",
+    border: "none", background: "#9333ea", color: "#fff", cursor: "pointer",
+    fontSize: "20px", fontWeight: "700", lineHeight: "1",
     boxShadow: "0 2px 10px rgba(0,0,0,0.25)", padding: "0",
   });
-  btn.addEventListener("click", () => {
+  openBtn.addEventListener("click", () => {
+    wrapper.style.display = "none"; // optimistic - panel.js's own load signal confirms this
     chrome.runtime.sendMessage({ type: "JOBAPPLIER_OPEN_PANEL" });
   });
-  document.body.appendChild(btn);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.id = "jobapplier-floating-close";
+  closeBtn.title = "Hide this button";
+  closeBtn.type = "button";
+  closeBtn.textContent = "✕";
+  Object.assign(closeBtn.style, {
+    position: "absolute", top: "-8px", left: "-8px", width: "16px", height: "16px",
+    borderRadius: "50%", border: "none", background: "#4b1d80", color: "#fff",
+    cursor: "pointer", fontSize: "9px", lineHeight: "16px", padding: "0",
+  });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    wrapper.style.display = "none";
+    chrome.storage.local.set({ [WIDGET_DISMISSED_KEY]: true });
+  });
+
+  wrapper.style.position = "fixed";
+  wrapper.style.padding = "8px 0 0 8px"; // room for the close button to overhang top-left
+  const inner = document.createElement("div");
+  inner.style.position = "relative";
+  inner.appendChild(openBtn);
+  inner.appendChild(closeBtn);
+  wrapper.appendChild(inner);
+  document.body.appendChild(wrapper);
+
+  chrome.storage.local.get([PANEL_OPEN_KEY, WIDGET_DISMISSED_KEY], (data) => {
+    if (data[PANEL_OPEN_KEY] || data[WIDGET_DISMISSED_KEY]) wrapper.style.display = "none";
+  });
 }
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  const wrapper = document.getElementById("jobapplier-floating-widget");
+  if (!wrapper) return;
+  if (PANEL_OPEN_KEY in changes) {
+    wrapper.style.display = changes[PANEL_OPEN_KEY].newValue ? "none" : "";
+  }
+  if (WIDGET_DISMISSED_KEY in changes && changes[WIDGET_DISMISSED_KEY].newValue) {
+    wrapper.style.display = "none";
+  }
+});
 
 // --- 2. Per-field "AI answer" buttons for essay-type questions ---
 
@@ -85,17 +136,34 @@ function styleAnswerButton(btn) {
 
 function injectAnswerButton(textarea, questionText) {
   textarea.dataset.jobapplierIconAdded = "1";
+
+  const row = document.createElement("div");
+  row.className = "jobapplier-ai-row";
+  Object.assign(row.style, { display: "flex", gap: "6px", marginTop: "4px", alignItems: "center" });
+
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = "✨ AI answer";
   btn.className = "jobapplier-ai-answer-btn";
   styleAnswerButton(btn);
 
+  // Optional tweak instructions (e.g. "mention my internship at X", "keep it under 80 words") -
+  // read fresh on every click, so the same input works for both the first generation and any
+  // regenerate that follows, no separate "edit" mode needed.
+  const notesInput = document.createElement("input");
+  notesInput.type = "text";
+  notesInput.placeholder = "Add instructions (optional)";
+  notesInput.className = "jobapplier-ai-notes-input";
+  Object.assign(notesInput.style, {
+    flex: "1", minWidth: "140px", maxWidth: "260px", fontSize: "12px",
+    padding: "4px 8px", borderRadius: "999px", border: "1px solid rgba(147,51,234,0.3)",
+  });
+
   btn.addEventListener("click", () => {
     btn.disabled = true;
     btn.textContent = "Generating...";
     chrome.runtime.sendMessage(
-      { type: "JOBAPPLIER_GENERATE_ANSWER", question: questionText },
+      { type: "JOBAPPLIER_GENERATE_ANSWER", question: questionText, notes: notesInput.value.trim() },
       (response) => {
         if (chrome.runtime.lastError || !response || response.error) {
           btn.textContent = "Failed - retry";
@@ -111,7 +179,9 @@ function injectAnswerButton(textarea, questionText) {
     );
   });
 
-  textarea.insertAdjacentElement("afterend", btn);
+  row.appendChild(btn);
+  row.appendChild(notesInput);
+  textarea.insertAdjacentElement("afterend", row);
 }
 
 function scanForEssayQuestions() {

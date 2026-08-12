@@ -1,5 +1,13 @@
 const BACKEND_URL = "http://127.0.0.1:5050";
 
+// Lets floating_widget.js (injected on every page) know whether the side panel is already
+// open, so its own "open panel" button can hide itself instead of offering a second way to
+// open something that's already open, and reappear once the panel actually closes.
+chrome.storage.local.set({ jobapplier_panel_open: true });
+window.addEventListener("pagehide", () => {
+  chrome.storage.local.set({ jobapplier_panel_open: false });
+});
+
 const backendWarning = document.getElementById("backend-warning");
 const detectedStatus = document.getElementById("detected-status");
 const detectedJobDiv = document.getElementById("detected-job");
