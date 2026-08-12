@@ -15,7 +15,7 @@
     .resume-preview ul.bullets li { margin-bottom: 2px; }
     .resume-preview .subentry { margin-top: 4px; }
     .resume-preview mark.changed {
-      background: rgba(237,161,0,0.20); border-bottom: 2px solid #eda100;
+      background: var(--highlight-wash); border-bottom: 2px solid var(--highlight);
       color: inherit; padding: 0 2px; border-radius: 2px;
     }
     /* Text identical to the master resume is lower-priority to review than what actually
@@ -23,9 +23,6 @@
        edits) means the eye lands on the edits first instead of having to hunt for the
        highlight color among a wall of same-weight text. */
     .resume-preview .unchanged { opacity: 0.45; }
-    @media (prefers-color-scheme: dark) {
-      .resume-preview mark.changed { background: rgba(201,133,0,0.28); border-bottom-color: #c98500; }
-    }
   </style>
 
   {% macro segs(segments) %}{% for seg in segments %}{% if seg.changed %}<mark class="changed">{{ seg.text }}</mark>{% else %}<span class="unchanged">{{ seg.text }}</span>{% endif %}{% endfor %}{% endmacro %}

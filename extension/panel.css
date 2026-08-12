@@ -12,24 +12,26 @@
   --accent:      #9333ea;
   --accent-wash: rgba(147,51,234,0.10);
   --button-ink:  #ffffff;
-  /* Status colors are fixed/theme-invariant - same hex in light and dark. */
-  --good:        #0ca30c;
-  --warning:     #fab219;
-  --serious:     #ec835a;
+  /* Status colors are fixed/theme-invariant by design, darkened until they clear 4.5:1
+     against this light surface - see base.html.jinja for the contrast numbers behind this. */
+  --good:        #0a820a;
+  --warning:     #956703;
+  --serious:     #c44717;
   --critical:    #d03b3b;
+  --highlight:   #966600;
+  --highlight-wash: rgba(150,102,0,0.16);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    /* Plum & Ink dark palette, matching webapp/templates/base.html.jinja's dark theme. */
-    --page: #0c1618; --surface: #142226; --text-1: #eaf4f3; --text-2: #b7cbc9;
-    --text-muted: #7e9997; --border: rgba(220,245,240,0.10); --gridline: #203536;
-    --accent: #c084fc; --accent-wash: rgba(192,132,252,0.16);
-    /* This violet is bright - white text on it is a poor contrast, so buttons use the page
-       color as their text in dark mode instead. */
-    --button-ink: var(--page);
-    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* Plum & Ink dark palette, matching webapp/templates/base.html.jinja's dark theme. */
+  --page: #0c1618; --surface: #142226; --text-1: #eaf4f3; --text-2: #b7cbc9;
+  --text-muted: #7e9997; --border: rgba(220,245,240,0.10); --gridline: #203536;
+  --accent: #c084fc; --accent-wash: rgba(192,132,252,0.16);
+  /* This violet is bright - white text on it is a poor contrast, so buttons use the page
+     color as their text in dark mode instead. */
+  --button-ink: var(--page);
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --highlight: #f5c26b; --highlight-wash: rgba(245,194,107,0.24);
 }
 
 * { box-sizing: border-box; }

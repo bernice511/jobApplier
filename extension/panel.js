@@ -89,6 +89,19 @@ async function checkBackend() {
   }
 }
 
+// The light/dark toggle lives on the webapp's Profile page - the panel just reads whatever
+// was set there, so both surfaces always agree.
+async function applyStoredTheme() {
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/theme`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.theme) document.documentElement.setAttribute("data-theme", data.theme);
+  } catch {
+    // Backend not reachable yet - stays on the default light theme; checkBackend() surfaces the warning.
+  }
+}
+
 // Mirrors content.js's jobIdentity() - job.id (LinkedIn's stable job id) when present,
 // otherwise the page url. NOT title/company: on a LinkedIn search-results page the sidebar
 // list can make title/company extraction latch onto the wrong job (see content.js), so
@@ -767,4 +780,5 @@ profileSaveBtn.addEventListener("click", async () => {
 autofillBtn.addEventListener("click", onAutofill);
 
 checkBackend();
+applyStoredTheme();
 loadStoredJob();

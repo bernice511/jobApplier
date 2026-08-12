@@ -12,10 +12,23 @@ from flask import Flask, jsonify, render_template, request, send_file
 from jobapplier.common import resume_parser, resume_store, screening_answers
 from jobapplier.common.config import GENERATED_DIR, RESUME_DIR, load_config
 from jobapplier.job_alerts import store as job_alerts_store
-from jobapplier.webapp import duplicate_detection, review_session, tailoring_log, tailoring_service
+from jobapplier.webapp import (
+    app_settings,
+    duplicate_detection,
+    review_session,
+    tailoring_log,
+    tailoring_service,
+)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB - generous for a resume PDF
+
+
+@app.context_processor
+def inject_theme():
+    """Makes {{ theme }} available in every server-rendered template (base.html.jinja sets it
+    as a data-theme attribute) without every route having to pass it explicitly."""
+    return {"theme": app_settings.get_theme()}
 
 
 @app.before_request
@@ -206,6 +219,19 @@ def api_profile_update():
     fields = request.get_json(silent=True) or {}
     screening_answers.update_answers(fields)
     return jsonify(_build_profile() or {"ok": True})
+
+
+@app.get("/api/theme")
+def api_theme_get():
+    return jsonify({"theme": app_settings.get_theme()})
+
+
+@app.post("/api/theme")
+def api_theme_set():
+    theme = (request.get_json(silent=True) or {}).get("theme", "")
+    if theme not in app_settings.VALID_THEMES:
+        return jsonify({"error": f"theme must be one of {app_settings.VALID_THEMES}"}), 400
+    return jsonify({"theme": app_settings.set_theme(theme)})
 
 
 @app.post("/api/screening-answers/patterns")

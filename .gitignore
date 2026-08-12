@@ -15,6 +15,7 @@ data/resume/*/
 data/analyze_cache.json
 data/tailor_cache.json
 data/job_alerts.json
+data/app_settings.json
 data/logs/
 data/answers/screening_answers.yaml
 data/answers/screening_answers.example.yaml

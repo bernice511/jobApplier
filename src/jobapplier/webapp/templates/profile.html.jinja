@@ -10,7 +10,23 @@
   }
   .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
   @media (max-width: 640px) { .profile-grid { grid-template-columns: 1fr; } }
+
+  .theme-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 2px; }
+  .theme-option {
+    border: none; background: transparent; color: var(--text-2); font-size: 0.85rem;
+    font-weight: 600; padding: 0.4rem 1rem; border-radius: 999px; cursor: pointer;
+  }
+  .theme-option.active { background: var(--accent); color: var(--button-ink); }
 </style>
+
+<div class="card">
+  <h2>Appearance</h2>
+  <p class="hint">Applies to this webapp and the browser extension panel.</p>
+  <div class="theme-toggle" id="theme-toggle">
+    <button type="button" class="theme-option" data-theme="light">Light</button>
+    <button type="button" class="theme-option" data-theme="dark">Dark</button>
+  </div>
+</div>
 
 <div class="card">
   <h2>Your profile</h2>
@@ -53,6 +69,28 @@
   ];
   const saveBtn = document.getElementById('save-btn');
   const saveStatus = document.getElementById('save-status');
+  const themeToggle = document.getElementById('theme-toggle');
+
+  function setThemeButtons(theme) {
+    themeToggle.querySelectorAll('.theme-option').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+  }
+
+  themeToggle.querySelectorAll('.theme-option').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const theme = btn.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      setThemeButtons(theme);
+      await fetch('/api/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme }),
+      });
+    });
+  });
+
+  setThemeButtons(document.documentElement.getAttribute('data-theme') || 'light');
 
   async function loadProfile() {
     const resp = await fetch('/api/profile');

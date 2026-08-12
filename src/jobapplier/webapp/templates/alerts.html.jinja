@@ -32,20 +32,23 @@
     return html ? `<div class="chip-row">${html}</div>` : '';
   }
 
-  function renderAlertCard(job) {
+  function renderAlertCard(job, index) {
     const div = document.createElement('div');
     div.className = 'job-card';
+    div.style.background = pastelTint(index);
     div.innerHTML = `
-      <div class="job-card-main">
-        <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
-        <div class="sub">Found ${job.found_date || ''}</div>
-        ${keywordChips(job.matched_keywords, job.suggested_keywords)}
-        <div class="downloads">
-          <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
-          <button class="secondary dismiss-btn" data-job-id="${job.job_id}">Dismiss</button>
+      <div class="job-card-top">
+        <div class="job-card-main">
+          <div class="meta">${job.title} @ ${job.company}${job.location ? ' - ' + job.location : ''}</div>
+          <div class="sub">Found ${job.found_date || ''}</div>
+          ${keywordChips(job.matched_keywords, job.suggested_keywords)}
         </div>
+        ${matchScorePanelHtml(job.match_score)}
       </div>
-      ${matchScorePanelHtml(job.match_score)}
+      <div class="job-card-actions">
+        <button class="secondary dismiss-btn">Dismiss</button>
+        <a class="pill-link" href="${job.url}" target="_blank" rel="noopener">View posting</a>
+      </div>
     `;
     div.querySelector('.dismiss-btn').addEventListener('click', () => dismiss(job.job_id));
     return div;
@@ -94,7 +97,7 @@
     }
     alertsEmpty.style.display = 'none';
     const start = (currentPage - 1) * PAGE_SIZE;
-    allAlerts.slice(start, start + PAGE_SIZE).forEach((job) => alertsList.appendChild(renderAlertCard(job)));
+    allAlerts.slice(start, start + PAGE_SIZE).forEach((job, i) => alertsList.appendChild(renderAlertCard(job, i)));
     renderPagination();
   }
 
