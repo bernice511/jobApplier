@@ -90,7 +90,7 @@ button.primary:disabled { opacity: 0.55; }
 .job-card-score {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.35rem; padding: 0.8rem; margin: 0.6rem 0; border-radius: 10px; text-align: center;
-  background: linear-gradient(160deg, #0f2422, #0a1716); color: #eaf4f3;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-1);
 }
 .job-card-score-ring {
   width: 54px; height: 54px; border-radius: 50%; border: 3px solid var(--accent);
