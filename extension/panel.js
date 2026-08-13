@@ -2,11 +2,12 @@ const BACKEND_URL = "http://127.0.0.1:5050";
 
 // Lets floating_widget.js (injected on every page) know whether the side panel is already
 // open, so its own "open panel" button can hide itself instead of offering a second way to
-// open something that's already open, and reappear once the panel actually closes.
-chrome.storage.local.set({ jobapplier_panel_open: true });
-window.addEventListener("pagehide", () => {
-  chrome.storage.local.set({ jobapplier_panel_open: false });
-});
+// open something that's already open, and reappear once the panel actually closes. A long-
+// lived port is the reliable way to detect this - background.js's onDisconnect handler for it
+// is guaranteed by the platform to fire when this document is torn down, unlike a page-level
+// "pagehide" listener (not reliably fired for side panel documents - the first version of this
+// used that, and the flag could get stuck "open" forever if it didn't fire).
+chrome.runtime.connect({ name: "jobapplier-panel" });
 
 const backendWarning = document.getElementById("backend-warning");
 const detectedStatus = document.getElementById("detected-status");

@@ -4,10 +4,26 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 
 const BACKEND_URL = "http://127.0.0.1:5050";
 const JOB_CACHE_STORAGE_KEY = "jobapplier_job_cache";
+const PANEL_OPEN_KEY = "jobapplier_panel_open";
 
 function jobIdentity(job) {
   return job && (job.id || job.url);
 }
+
+// panel.js opens a long-lived port on load (name: "jobapplier-panel") purely so this
+// onDisconnect fires - Chrome guarantees that when the panel's document is torn down, which is
+// the reliable way to know the panel actually closed (a page-level "pagehide" listener in
+// panel.js itself was tried first and wasn't reliable for side panel documents - the "open
+// panel" flag could get stuck true forever if it didn't fire, permanently hiding the floating
+// widget's button). Set true as soon as the port connects, not just on background.js startup,
+// so a stale true from a crashed/killed previous panel session can't linger past a new open.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "jobapplier-panel") return;
+  chrome.storage.local.set({ [PANEL_OPEN_KEY]: true });
+  port.onDisconnect.addListener(() => {
+    chrome.storage.local.set({ [PANEL_OPEN_KEY]: false });
+  });
+});
 
 // The floating widget's "open panel" button (floating_widget.js) - sidePanel.open() must be
 // called in direct response to a user gesture, which this message handler is (it only ever
