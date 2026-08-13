@@ -39,9 +39,26 @@ resume/cover-letter generation are unaffected unless a caller explicitly opts in
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 
 CLAUDE_CLI_TIMEOUT_SECONDS = 180
+
+# Flags this module adds on top of the user's own `claude` install - not all of them exist on
+# every CLI version (e.g. --safe-mode/--no-session-persistence are relatively recent additions;
+# a friend/collaborator on an older install hit "error: unknown option '--safe-mode'" with no
+# usable output at all). Rather than pin a minimum CLI version, call_claude() detects exactly
+# that failure and retries with the offending flag stripped - this map is what lets it know
+# whether a flag takes a following value (so both get removed together).
+_OPTIONAL_FLAG_TAKES_VALUE = {
+    "--output-format": True,
+    "--tools": True,
+    "--safe-mode": False,
+    "--no-session-persistence": False,
+    "--model": True,
+    "--system-prompt": True,
+}
+_UNKNOWN_OPTION_RE = re.compile(r"unknown option '(--[\w-]+)'")
 
 
 class ClaudeCLIError(RuntimeError):
@@ -62,6 +79,40 @@ def _build_argv(model: str | None, system_prompt: str | None) -> list[str]:
     return argv
 
 
+def _strip_flag(argv: list[str], flag: str) -> list[str]:
+    if flag not in argv:
+        return argv
+    idx = argv.index(flag)
+    span = 2 if _OPTIONAL_FLAG_TAKES_VALUE.get(flag, False) else 1
+    return argv[:idx] + argv[idx + span:]
+
+
+def _run_claude(argv: list[str], prompt: str, timeout_seconds: int) -> subprocess.CompletedProcess:
+    """Runs argv, retrying with an unsupported flag stripped each time the CLI reports one
+    (older `claude` installs don't recognize every flag this module passes) - up to once per
+    flag currently in argv, so a version missing several of them still eventually succeeds."""
+    for _ in range(len(argv)):
+        try:
+            proc = subprocess.run(
+                argv, input=prompt, capture_output=True, text=True, timeout=timeout_seconds
+            )
+        except FileNotFoundError as exc:
+            raise ClaudeCLIError(
+                "The `claude` CLI was not found on PATH. Install Claude Code and run "
+                "`claude /login` in a terminal first."
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ClaudeCLIError(f"claude CLI timed out after {timeout_seconds}s") from exc
+
+        if proc.returncode != 0:
+            match = _UNKNOWN_OPTION_RE.search(proc.stderr)
+            if match and match.group(1) in argv:
+                argv = _strip_flag(argv, match.group(1))
+                continue
+        return proc
+    return proc  # pragma: no cover - unreachable unless argv has more optional flags than loops
+
+
 def call_claude(
     prompt: str,
     timeout_seconds: int = CLAUDE_CLI_TIMEOUT_SECONDS,
@@ -71,21 +122,7 @@ def call_claude(
     """Sends `prompt` to `claude` via stdin in headless mode and returns the plain text
     response. Raises ClaudeCLIError on any failure (not logged in, non-zero exit, timeout,
     unparseable output, etc.)."""
-    try:
-        proc = subprocess.run(
-            _build_argv(model, system_prompt),
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
-    except FileNotFoundError as exc:
-        raise ClaudeCLIError(
-            "The `claude` CLI was not found on PATH. Install Claude Code and run "
-            "`claude /login` in a terminal first."
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise ClaudeCLIError(f"claude CLI timed out after {timeout_seconds}s") from exc
+    proc = _run_claude(_build_argv(model, system_prompt), prompt, timeout_seconds)
 
     if not proc.stdout.strip():
         raise ClaudeCLIError(
