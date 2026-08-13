@@ -67,12 +67,19 @@ own judgment about how aggressively to run this.
    ```bash
    cp .env.example .env
    ```
-   Then edit `.env`:
+   Then edit `.env` (see `.env.example` for the full, commented list):
    - `JOB_TITLES` - comma-separated keywords to search for
    - `LOCATIONS` - semicolon-separated locations (use `Remote` as one if relevant)
    - `SENIORITY_LEVEL` - comma-separated, from: `Internship, Entry level, Associate, Mid-Senior level, Director, Executive`
    - `MAX_APPLICATIONS_PER_RUN`, `MIN_DELAY_SECONDS`, `MAX_DELAY_SECONDS` - safety/rate-limit knobs
    - `BROWSER_PROFILE_DIR` - leave blank to default to `data/browser_profile`
+   - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` / `ADZUNA_COUNTRY` - only needed for the Job Alerts
+     dashboard (`/alerts`) below, not the LinkedIn automation. Free signup at
+     [developer.adzuna.com](https://developer.adzuna.com).
+   - `ALERT_MATCH_THRESHOLD`, `MAX_JOBS_TO_SCORE_PER_RUN` - tuning knobs for that same pipeline
+   - `JOOBLE_API_KEY` - optional second live-search source on the Job Alerts page, alongside
+     Adzuna. Free signup at [jooble.org/api/about](https://jooble.org/api/about); leave blank
+     to skip it entirely.
 
 5. **Your resume**: place your resume PDF at `data/resume/master_resume.pdf`. The first run
    parses it into `data/resume/master_resume.json` (via Claude) and caches it - delete that
@@ -159,8 +166,38 @@ Open `http://127.0.0.1:5050`. There are two pages:
     date, skill, or metric that isn't already in your master resume. Approving a suggested
     keyword is what lets it be woven in - it's you vouching it's true, not the model deciding
     on its own.
-- **Search past applications**: ask things like "which resume did I use for Netflix" in a
-  simple chat box - this just does a local keyword search over the log below, no Claude call.
+- **Job Alerts** (`/alerts`): a card grid of listings the background pipeline (below) already
+  scored well against your resume, plus a live search box that queries Adzuna (and Jooble, if
+  `JOOBLE_API_KEY` is set) directly - unscored by default since scoring is a `claude` CLI call
+  per listing, with a category filter (IT/Engineering/Graduate/Scientific & QA) and a per-card
+  "Analyze match" button to score one on demand.
+- **Applications** (`/search`): every resume/cover letter you've generated, tracked by status
+  (Saved/Applied/Interview/Offer/Rejected), with tags and a company/title/location/tag filter.
+- **Analytics** (`/analytics`): funnel, weekly volume, interview rate, and source breakdown
+  computed from the Applications log.
+- **Resume** / **Profile**: upload/re-parse your resume PDF, and fill in the structured
+  autofill fields (phone, work authorization, salary expectation, etc.) the extension uses.
+
+### Job alerts background pipeline (optional)
+
+`/alerts` is populated by a separate script, not the Flask server itself - it needs
+`ADZUNA_APP_ID`/`ADZUNA_APP_KEY` in `.env` (see "Environment variables" above) and runs
+independently:
+```bash
+DYLD_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src python3 -m jobapplier.job_alerts.main
+```
+Fetches new listings for every `JOB_TITLES` x `LOCATIONS` pair, scores each new one against
+your resume, and records it (even below-threshold ones, so they're never re-scored) to
+`data/job_alerts.json`.
+
+To run this automatically instead of by hand, a launchd schedule (macOS, 7am/1pm/6pm daily) is
+provided at `scripts/com.jobapplier.jobalerts.plist` but isn't installed automatically:
+```bash
+cp scripts/com.jobapplier.jobalerts.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.jobapplier.jobalerts.plist
+```
+Logs to `data/logs/job_alerts.log`. The plist hardcodes this repo's path and your username -
+edit it first if you've cloned this somewhere other than the original machine/path.
 
 Every paste-a-JD generation is logged to `data/tailoring_log.csv` (timestamp, company, title,
 location, resume/cover-letter paths, match score) - separate from `data/applications.csv`
@@ -252,12 +289,17 @@ each, so expect to iterate on them.
 
 ## Project structure
 
-`src/jobapplier/` is split into three packages:
-- `common/` - shared by both flows: config loading, the `claude` CLI wrapper, resume
+`src/jobapplier/` is split into four packages:
+- `common/` - shared by every flow: config loading, the `claude` CLI wrapper, resume
   parsing (PDF -> JSON), and PDF rendering (JSON -> resume/cover-letter PDF).
 - `linkedin_apply/` - the full search/apply automation (`main.py` is its entry point).
 - `webapp/` - the paste-a-JD Flask app (`app.py` is its entry point) that the web UI and
   browser extension both talk to.
+- `job_alerts/` - the background pipeline behind the `/alerts` dashboard (`main.py` is its
+  entry point): fetches listings from Adzuna, scores them against your resume, and stores
+  results in `data/job_alerts.json`. `webapp/app.py`'s live search on that same page also
+  queries Adzuna/Jooble directly (`adzuna_source.py`/`jooble_source.py`), independent of this
+  scheduled pipeline.
 
 `extension/` (the Chrome extension) is separate from the Python package - it's plain
 JS/HTML/manifest files that call `webapp/app.py` over HTTP.
